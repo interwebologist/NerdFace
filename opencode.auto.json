@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "NVIDIA-Nemotron-3-Super-120B-A12B-UD-Q4_K_XL.gguf",
+  "model": "nemotron/NVIDIA-Nemotron-3-Super-120B-A12B-UD-Q4_K_XL.gguf",
   "compaction": {
     "reserved": 20000,
     "threshold": 0.85
@@ -22,15 +22,15 @@
   },
   "agent": {
     "build": {
-      "model": "NVIDIA-Nemotron-3-Super-120B-A12B-UD-Q4_K_XL.gguf",
+      "model": "nemotron/NVIDIA-Nemotron-3-Super-120B-A12B-UD-Q4_K_XL.gguf",
       "permission": {
-        "edit": "auto",
-        "bash": "auto",
-        "write": "auto",
-        "read": "auto",
-        "webfetch": "auto",
-        "glob": "auto",
-        "grep": "auto"
+        "edit": "allow",
+        "bash": "allow",
+        "write": "allow",
+        "read": "allow",
+        "webfetch": "allow",
+        "glob": "allow",
+        "grep": "allow"
       },
       "tools": {
         "edit": true,
