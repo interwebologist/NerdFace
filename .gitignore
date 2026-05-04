@@ -2,8 +2,7 @@ node_modules
 package.json
 bun.lock
 .gitignore
-.config
-opencode.json
+.config/
 .env
 .env.local
 .env.*.local

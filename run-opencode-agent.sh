@@ -63,6 +63,9 @@ if [[ -f "$HOME/.bashrc" ]]; then
     source "$HOME/.bashrc"
 fi
 
+# Use the auto config for autonomous operation
+export OPENCODE_CONFIG="$PWD/opencode.auto.json"
+
 # Ask for agent number (default to 1 if empty)
 echo "Which agent number are you using? (e.g., 1 for GITHUB_AGENT1_TOKEN, default: 1)"
 read AGENT_INPUT
