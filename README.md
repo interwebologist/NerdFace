@@ -13,7 +13,7 @@
 
 ## Guardrails Overview
 
-The Skunk Agent uses **llm-guard** to scan all inputs and outputs for security threats before they reach the LLM or are returned to the user.
+The Skunk Agent uses **llm-guard** to scan all inputs and outputs for security threats before they reach the the agent or before it leaves the agent and they are returned to the user.
 
 ### What Guardrails Protect Against
 
