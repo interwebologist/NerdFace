@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/skunkagent.png" alt="Skunk Agent Logo" width="200"/>
+  <img src="images/skunkagent.png" alt="Skunk Agent Logo" width="600"/>
 </p>
 
 # Skunk Agent - "Agent with Defenses"
