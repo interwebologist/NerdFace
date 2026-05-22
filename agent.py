@@ -174,6 +174,7 @@ TOOL_REGISTRY = {
     "run_bash": {
         "func": run_bash,
         "description": "Run a bash command",
+        "risk": "high",
         "parameters": {
             "type": "object",
             "properties": {"command": {"type": "string"}},
@@ -282,7 +283,31 @@ def load_system_prompt() -> str:
     return ""
 
 
-def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
+def should_require_approval(func_name: str) -> bool:
+    """Check if tool requires approval based on risk level and HITL config."""
+    if os.getenv("HITL_ENABLED", "true").lower() not in ("true", "1", "yes"):
+        return False
+    tool_cfg = TOOL_REGISTRY.get(func_name, {})
+    return tool_cfg.get("risk") == "high"
+
+
+def prompt_approve_cli(func_name: str, args: dict) -> bool:
+    """CLI approval prompt."""
+    print("\n[HITL] Tool requires approval:")
+    print(f"  Tool: {func_name}")
+    print(f"  Args: {json.dumps(args, indent=2)}")
+    while True:
+        response = input("Approve? [y/N]: ").strip().lower()
+        if response in ("y", "yes"):
+            return True
+        if response in ("", "n", "no"):
+            return False
+        print("Please enter 'y' or 'n'")
+
+
+def run(
+    prompt: str, max_iterations: int = MAX_ITERATIONS, require_approval: bool = None
+) -> str:
     global CHAT_HISTORY
 
     if guardrails.is_kill_switch_triggered():
@@ -335,6 +360,22 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                 if func_name in TOOL_REGISTRY:
                     try:
                         args = json.loads(call.function.arguments)
+
+                        if should_require_approval(func_name):
+                            if require_approval is None:
+                                approved = prompt_approve_cli(func_name, args)
+                            else:
+                                approved = require_approval(func_name, args)
+                            if not approved:
+                                CHAT_HISTORY.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": call.id,
+                                        "content": f"Tool execution blocked by user: {func_name}",
+                                    }
+                                )
+                                continue
+
                         func = TOOL_REGISTRY[func_name]["func"]
                         if callable(func):
                             out = func(**args)
