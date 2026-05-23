@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="images/skunkagent.png" alt="Skunk Agent Logo" width="600"/>
+  <img src="images/skunkagent.png" alt="Nerdface Logo" width="600"/>
 </p>
 
-# Skunk Agent - "Agent with Defenses"
+# Nerdface - "Agent with Defenses"
 
 ## Project Focus for MVP (Work In Progress)
 
@@ -29,7 +29,7 @@
 
 ## Guardrails Overview
 
-The Skunk Agent uses **llm-guard** to scan all inputs and outputs for security threats before they reach the the agent or before it leaves the agent and they are returned to the user.
+The Nerdface uses **llm-guard** to scan all inputs and outputs for security threats before they reach the the agent or before it leaves the agent and they are returned to the user.
 
 ### What Guardrails Protect Against
 
@@ -76,7 +76,7 @@ User Query → Guardrails (Local NLP) → Agent → Guardrails → User
 The models are automatically downloaded on first use. To pre-download them:
 
 ```bash
-cd /Users/ryan/AI/skunkagent
+cd /Users/ryan/AI/nerdface
 uv run python -c "from guardrails import Guardrails; g = Guardrails()"
 ```
 
@@ -86,9 +86,9 @@ Models will be cached in `~/.cache/huggingface/hub/` for future runs.
 
 #### State Persistence
 
-The agent saves conversation history to SQLite at `~/.skunk/state.db` using the `user` field from `/v1/chat/completions` as the session ID.
+The agent saves conversation history to SQLite at `~/.nerdface/state.db` using the `user` field from `/v1/chat/completions` as the session ID.
 
-#### Skunk-agent Query
+#### Nerdface Query
 
 ```bash
 curl -X POST http://localhost:8000/apply \

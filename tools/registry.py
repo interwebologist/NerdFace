@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Central registry for all skunkagent-agent tools.
+"""Central registry for all nerdface-agent tools.
 
 Each tool file calls ``registry.register()`` at module level to declare its
 schema, handler, toolset membership, and availability check. ``api.py``
