@@ -1,6 +1,6 @@
 FROM python:3.13-slim
-#CODING AGENT CONTAINER ONLY. SHURU IS MICROVM for skunkagent
-# meant to be used in skunkagent-worktree worktrees to run yolo coding agents
+#CODING AGENT CONTAINER ONLY. SHURU IS MICROVM for nerdface
+# meant to be used in nerdface-worktree worktrees to run yolo coding agents
 
 # Install uv, curl, git, vim, tmux, nodejs, and npm
 RUN apt-get update && apt-get install -y curl git vim tmux nodejs npm && rm -rf /var/lib/apt/lists/*

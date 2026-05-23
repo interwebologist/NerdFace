@@ -174,7 +174,7 @@ echo ""
 echo "Shuru configuration has been set up for agent $AGENT_NUMBER"
 echo "You can now run 'shuru' directly in this workspace"
 echo "A marker file 'shuru.sh' has been created to indicate the setup is complete"
-echo "To update the configuration for a different agent, re-run: ../skunkagent/run-agent.sh $BRANCH_NAME"
+echo "To update the configuration for a different agent, re-run: ../nerdface/run-agent.sh $BRANCH_NAME"
 
 # Create marker file to indicate Shuru is configured
 touch shuru.sh
