@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/skunkagent.png" alt="Nerdface Logo" width="600"/>
+  <img src="images/nerdface.png" alt="Nerdface Logo" width="600"/>
 </p>
 
 # Nerdface - "Agent with Defenses"
