@@ -2,7 +2,7 @@
   <img src="images/nerdface.png" alt="Nerdface Logo" width="600"/>
 </p>
 
-# ☝️🤓 Nerdface 
+# ☝️🤓 NERD FACE 
 
 A hackable, lightweight local agent hardened for production
 
