@@ -3,11 +3,11 @@
 CLI Interface for SkunkAgent
 """
 
-import sys
 import argparse
 import cmd
 import logging
 import os
+import sys
 from typing import Dict, List, Optional, Any
 
 from state import SimpleSessionDB
@@ -21,7 +21,7 @@ class SimpleCLI(cmd.Cmd):
     prompt = "myapp> "
     intro = "Welcome! Type /help for commands or start chatting."
 
-    def __init__(self, session_db: SimpleSessionDB = None, auto_session: bool = True):
+    def __init__(self, session_db: Optional[SimpleSessionDB] = None, auto_session: bool = True):
         super().__init__()
         self.session_db = session_db
         self.current_session_id: Optional[str] = None
@@ -49,6 +49,16 @@ class SimpleCLI(cmd.Cmd):
         if line.startswith("/"):
             line = line[1:]
         return super().onecmd(line)
+
+    def precmd(self, line: str) -> str:
+        """Buffer multi-line paste input"""
+        if "\n" in line and not line.startswith("/"):
+            lines = line.split("\n")
+            self.cmdqueue.extend(reversed(lines[1:]))
+            return lines[0]
+        if self.cmdqueue:
+            return self.cmdqueue.pop(0)
+        return line
 
     def do_new(self, args: str):
         """Start a new session: /new [title]"""
