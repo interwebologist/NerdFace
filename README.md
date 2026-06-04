@@ -12,9 +12,9 @@ A hackable, lightweight local agent hardened for production
 
 - [X] **Guardrails** - Input scanning to prevent prompt injection using llm-guard NLP models
 - [X] **Kill Switch** - riased guardrail kills agent
-- [] **Configurable Kill Switch Behaviour** - set kill switch rate limit, set kill switch to fully block at X hits,
-- [] **Policy** - Human-in-the-loop approvals (out of band or Auth'd IDV. Would like out of band links and biometric scans ) for destructive actions, all policy outside the prompt.
-- [] **logging** - immutable logs for auditing user+agent+tool action. connections for loki /tempo
+- [ ] **Configurable Kill Switch Behaviour** - set kill switch rate limit, set kill switch to fully block at X hits,
+- [ ] **Policy** - Human-in-the-loop approvals (out of band or Auth'd IDV. Would like out of band links and biometric scans ) for destructive actions, all policy outside the prompt.
+- [ ] **logging** - immutable logs for auditing user+agent+tool action. connections for loki /tempo
 - [X] **Sandbox** - microVM (Shuru) or strong container isolation
 - [X] **Secrets Vault** - Shuru MicroVM has secret proxy
 - [ ] **Secured Messaging** - API needs token
@@ -29,7 +29,7 @@ A hackable, lightweight local agent hardened for production
 - [X] **Tools**
 - [X] **CLI** - now with /paste mode for multi-line inputs
 - [X] **API**
-- [X] **Web Browser** - Camofox: self hosted, bypass bot protections.local,no pay, fast
+- [X] **Web Browser** - Camofox: self hosted, bypass bot protections.local , no pay, fast
 
 - [X] **System Design Patterns for Small languge models**
 - [X] **Compression** - head / tail with summerize the middle. tool calls clean up when not needed. 4 part algorithm. patachute for LLM gateway protection as 2nd safety
