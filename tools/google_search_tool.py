@@ -25,7 +25,9 @@ def google_search(q: str, num: int = 10) -> str:
         response = requests.post(url, headers=headers, data=payload, timeout=30)
         if response.status_code == 403:
             return json.dumps(
-                {"error": "Serpbase API key invalid or unauthorized. Check your API key at https://serpbase.com/"}
+                {
+                    "error": "Serpbase API key invalid or unauthorized. Check your API key at https://serpbase.com/"
+                }
             )
         if response.status_code == 429:
             return json.dumps(
@@ -72,6 +74,7 @@ GOOGLE_SEARCH_SCHEMA = {
         "required": ["q"],
     },
 }
+
 
 def check_google_search_requirements() -> bool:
     """Check if SERPBASE_API_KEY is set."""
