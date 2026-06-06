@@ -23,7 +23,7 @@ A hackable, lightweight local agent hardened for production
 
 #### Agent AI Stuff
 
-- [X] **Memory** - Local , possible FTS5, HRR Holographic. FTS5 O(log N) with trust score RRF. 
+- [X] **Memory** - Local HRR Holographic X FTS5 O(log N) with trust score RRF. 
 - [ ] **Sub-agents** - We want endless types of 'workflows' for orchestration. Reflex, a deep research workflow, coding workflow for agent scripts, reflection, reflexion, whatever. all can be used in skills. focused on powerusers of agentic ai
 - [X] **Search Engine:** (SerpBase) that allows deep search engine Dorking and pay as you go, keep forever credits for searches
 - [X] **Tools**
