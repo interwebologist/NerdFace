@@ -14,7 +14,7 @@ from tools.memory.store import MemoryStore
 logger = logging.getLogger(__name__)
 
 discover_builtin_tools()
-load_dotenv(".nerdface/.env")
+load_dotenv()
 
 guardrails: Guardrails = create_guardrails()
 
