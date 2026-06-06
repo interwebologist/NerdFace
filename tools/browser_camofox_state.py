@@ -13,15 +13,33 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from tools.nerdface_constants import get_nerdface_home
-
 CAMOFOX_STATE_DIR_NAME = "browser_auth"
 CAMOFOX_STATE_SUBDIR = "camofox"
+
+
+def get_nerdface_home() -> Path:
+    """Return the Nerdface home directory (.nerdface).
+
+    This is the single source of truth for all Nerdface data directories.
+    """
+    return Path(__file__).resolve().parent.parent / ".nerdface"
 
 
 def get_camofox_state_dir() -> Path:
     """Return the profile-scoped root directory for Camofox persistence."""
     return get_nerdface_home() / CAMOFOX_STATE_DIR_NAME / CAMOFOX_STATE_SUBDIR
+
+
+def get_nerdface_dir(subpath: str) -> Path:
+    """Return subpath under .nerdface directory.
+
+    Args:
+        subpath: Path relative to .nerdface (e.g., "browser_auth/camofox")
+
+    Returns:
+        Absolute Path to the subdirectory
+    """
+    return get_nerdface_home() / subpath
 
 
 def get_camofox_identity(task_id: Optional[str] = None) -> Dict[str, str]:
