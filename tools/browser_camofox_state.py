@@ -13,10 +13,16 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from tools.nerdface_constants import get_nerdface_home
-
 CAMOFOX_STATE_DIR_NAME = "browser_auth"
 CAMOFOX_STATE_SUBDIR = "camofox"
+
+
+def get_nerdface_home() -> Path:
+    """Return the Nerdface home directory (.nerdface).
+
+    This is the single source of truth for all Nerdface data directories.
+    """
+    return Path(__file__).resolve().parent.parent / ".nerdface"
 
 
 def get_camofox_state_dir() -> Path:

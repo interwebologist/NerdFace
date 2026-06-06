@@ -32,8 +32,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from tools.browser_camofox_state import get_camofox_identity
-from tools.nerdface_constants import get_nerdface_home
+from tools.browser_camofox_state import get_camofox_identity, get_nerdface_home
 from tools.registry import registry, tool_error
 
 logger = logging.getLogger(__name__)
