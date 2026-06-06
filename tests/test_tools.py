@@ -95,8 +95,8 @@ class TestTools(unittest.TestCase):
         data = json.loads(result)
         self.assertIn("error", data)
 
-    @patch("tools.google_search_tool.requests.request")
-    def test_google_search_success(self, mock_request):
+    @patch("tools.google_search_tool.requests.post")
+    def test_google_search_success(self, mock_post):
         """Test google_search tool with mocked response."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -109,19 +109,19 @@ class TestTools(unittest.TestCase):
             ]
         }
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        mock_post.return_value = mock_response
 
         result = registry.dispatch("google_search", {"q": "test query"})
         data = json.loads(result)
         self.assertIn("results", data)
 
-    @patch("tools.google_search_tool.requests.request")
-    def test_google_search_no_results(self, mock_request):
+    @patch("tools.google_search_tool.requests.post")
+    def test_google_search_no_results(self, mock_post):
         """Test google_search tool with no organic results."""
         mock_response = MagicMock()
         mock_response.json.return_value = {"organic": []}
         mock_response.raise_for_status.return_value = None
-        mock_request.return_value = mock_response
+        mock_post.return_value = mock_response
 
         result = registry.dispatch("google_search", {"q": "test query"})
         data = json.loads(result)
