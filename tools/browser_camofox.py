@@ -17,7 +17,7 @@ Setup::
     # Option 2: Docker
     docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser
 
-Then set ``CAMOFOX_URL=http://localhost:9377`` in ``~/.hermes/.env``.
+Then set ``CAMOFOX_URL=http://localhost:9377`` in ``.nerdface/.env``.
 """
 
 from __future__ import annotations
@@ -32,11 +32,448 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from hermes_cli.config import cfg_get, load_config
 from tools.browser_camofox_state import get_camofox_identity
-from tools.registry import tool_error
+from tools.nerdface_constants import get_nerdface_home
+from tools.registry import registry, tool_error
 
 logger = logging.getLogger(__name__)
+
+
+def _camofox_check() -> bool:
+    """Check if Camofox backend is available."""
+    return check_camofox_available()
+
+
+CAMOFOX_TOOL_SCHEMAS = [
+    {
+        "name": "browser_navigate",
+        "description": (
+            "Navigate to a URL. Use this to visit websites, login pages, or any web resource.\n\n"
+            "**Usage:**\n"
+            "- Call this first to open a page before other browser operations\n"
+            "- The URL must be accessible from the Camofox server\n"
+            "- Use browser_snapshot after navigation to get page state\n\n"
+            "**Example:**\n"
+            "  browser_navigate(url='https://example.com')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The URL to navigate to"},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "browser_snapshot",
+        "description": (
+            "Get an accessibility snapshot of the current page.\n\n"
+            "**Returns:**\n"
+            "- Accessibility tree with element refs for interaction\n"
+            "- List of images, forms, and interactive elements\n"
+            "- Current URL and title\n\n"
+            "**Usage:**\n"
+            "- Call this after navigation to see page structure\n"
+            "- Use element refs from the snapshot for click/type operations\n"
+            "- Pass full=True to get complete tree (may be truncated)\n\n"
+            "**Example:**\n"
+            "  browser_snapshot(full=False)"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "full": {
+                    "type": "boolean",
+                    "description": "Get complete accessibility tree (default: False)",
+                    "default": False,
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "browser_click",
+        "description": (
+            "Click an element by its accessibility ref.\n\n"
+            "**Usage:**\n"
+            "- Get element refs from browser_snapshot\n"
+            "- Works on buttons, links, checkboxes, etc.\n"
+            "- Returns success status\n\n"
+            "**Example:**\n"
+            "  browser_click(ref='btn_submit_123')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ref": {"type": "string", "description": "Element ref from snapshot"},
+            },
+            "required": ["ref"],
+        },
+    },
+    {
+        "name": "browser_type",
+        "description": (
+            "Type text into an input field by its accessibility ref.\n\n"
+            "**Usage:**\n"
+            "- Get input element refs from browser_snapshot\n"
+            "- Use browser_click first to focus the input\n"
+            "- Returns success status\n\n"
+            "**Example:**\n"
+            "  browser_type(ref='input_email_456', text='user@example.com')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "ref": {
+                    "type": "string",
+                    "description": "Input element ref from snapshot",
+                },
+                "text": {"type": "string", "description": "Text to type"},
+            },
+            "required": ["ref", "text"],
+        },
+    },
+    {
+        "name": "browser_scroll",
+        "description": (
+            "Scroll the page up or down.\n\n"
+            "**Usage:**\n"
+            "- Scroll down to see more content\n"
+            "- Scroll up to go back\n"
+            "- Returns success status\n\n"
+            "**Example:**\n"
+            "  browser_scroll(direction='down')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "direction": {
+                    "type": "string",
+                    "description": "Scroll direction: 'up' or 'down'",
+                    "default": "down",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "browser_back",
+        "description": (
+            "Navigate back to the previous page in history.\n\n"
+            "**Usage:**\n"
+            "- Go back to previous page\n"
+            "- Returns success status\n\n"
+            "**Example:**\n"
+            "  browser_back()"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "browser_press",
+        "description": (
+            "Press a keyboard key or key combination.\n\n"
+            "**Usage:**\n"
+            "- Press Enter, Tab, Escape, etc.\n"
+            "- Use key combinations like 'Ctrl+A'\n"
+            "- Returns success status\n\n"
+            "**Example:**\n"
+            "  browser_press(key='Enter')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Key or key combination to press",
+                    "default": "Enter",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "browser_get_images",
+        "description": (
+            "Extract all images from the current page.\n\n"
+            "**Returns:**\n"
+            "- List of images with src URLs and alt text\n"
+            "- Useful for finding logos, icons, or image-based content\n\n"
+            "**Usage:**\n"
+            "- Call after navigation to find images\n"
+            "- Returns empty list if no images found\n\n"
+            "**Example:**\n"
+            "  browser_get_images()"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "browser_vision",
+        "description": (
+            "Analyze the current page screenshot with a vision LLM.\n\n"
+            "**Usage:**\n"
+            "- Ask questions about the page visual content\n"
+            "- Get descriptions of elements, layouts, or content\n"
+            "- Returns AI analysis as text\n\n"
+            "**Example:**\n"
+            "  browser_vision(question='What is the main call to action on this page?')"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "Question about the page visual content",
+                },
+                "annotate": {
+                    "type": "boolean",
+                    "description": "Include accessibility tree in context (default: False)",
+                    "default": False,
+                },
+            },
+            "required": ["question"],
+        },
+    },
+    {
+        "name": "browser_console",
+        "description": (
+            "Get browser console output (limited support).\n\n"
+            "**Note:**\n"
+            "- Camofox does not expose browser console logs via REST API\n"
+            "- This tool returns empty results with a note\n"
+            "- Use browser_snapshot or browser_vision instead\n\n"
+            "**Example:**\n"
+            "  browser_console()"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "clear": {
+                    "type": "boolean",
+                    "description": "Clear console (no-op for Camofox)",
+                    "default": False,
+                },
+                "expression": {
+                    "type": "string",
+                    "description": "JavaScript expression to evaluate (no-op for Camofox)",
+                },
+            },
+            "required": [],
+        },
+    },
+]
+
+registry.register(
+    name="browser_navigate",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[0],
+    handler=lambda args, **kw: camofox_navigate(
+        url=args.get("url", ""), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="🌐",
+)
+
+registry.register(
+    name="browser_snapshot",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[1],
+    handler=lambda args, **kw: camofox_snapshot(
+        full=args.get("full", False), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="📸",
+)
+
+registry.register(
+    name="browser_click",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[2],
+    handler=lambda args, **kw: camofox_click(
+        ref=args.get("ref", ""), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="👆",
+)
+
+registry.register(
+    name="browser_type",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[3],
+    handler=lambda args, **kw: camofox_type(
+        ref=args.get("ref", ""), text=args.get("text", ""), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="⌨️",
+)
+
+registry.register(
+    name="browser_scroll",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[4],
+    handler=lambda args, **kw: camofox_scroll(
+        direction=args.get("direction", "down"), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="📜",
+)
+
+registry.register(
+    name="browser_back",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[5],
+    handler=lambda args, **kw: camofox_back(task_id=kw.get("task_id")),
+    check_fn=_camofox_check,
+    emoji="◀️",
+)
+
+registry.register(
+    name="browser_press",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[6],
+    handler=lambda args, **kw: camofox_press(
+        key=args.get("key", ""), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="⌨️",
+)
+
+registry.register(
+    name="browser_get_images",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[7],
+    handler=lambda args, **kw: camofox_get_images(task_id=kw.get("task_id")),
+    check_fn=_camofox_check,
+    emoji="🖼️",
+)
+
+registry.register(
+    name="browser_vision",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[8],
+    handler=lambda args, **kw: camofox_vision(
+        question=args.get("question", ""),
+        annotate=args.get("annotate", False),
+        task_id=kw.get("task_id"),
+    ),
+    check_fn=_camofox_check,
+    emoji="👁️",
+)
+
+registry.register(
+    name="browser_console",
+    toolset="browser-camofox",
+    schema=CAMOFOX_TOOL_SCHEMAS[9],
+    handler=lambda args, **kw: camofox_console(
+        clear=args.get("clear", False), task_id=kw.get("task_id")
+    ),
+    check_fn=_camofox_check,
+    emoji="🖥️",
+)
+
+# ============================================================================
+# Helper Functions (replaces browser_tool.py)
+# ============================================================================
+
+SNAPSHOT_SUMMARIZE_THRESHOLD = 8000
+
+
+def _truncate_snapshot(snapshot_text: str, max_chars: int = 8000) -> str:
+    """Structure-aware truncation for snapshots.
+
+    Cuts at line boundaries so that accessibility tree elements are never
+    split mid-line, and appends a note telling the agent how much was
+    omitted.
+
+    Args:
+        snapshot_text: The snapshot text to truncate
+        max_chars: Maximum characters to keep
+
+    Returns:
+        Truncated text with indicator if truncated
+    """
+    if len(snapshot_text) <= max_chars:
+        return snapshot_text
+
+    lines = snapshot_text.split("\n")
+    result: list[str] = []
+    chars = 0
+    for line in lines:
+        if chars + len(line) + 1 > max_chars - 80:  # reserve space for note
+            break
+        result.append(line)
+        chars += len(line) + 1
+    remaining = len(lines) - len(result)
+    if remaining > 0:
+        result.append(
+            f"\n[... {remaining} more lines truncated, use browser_snapshot for full content]"
+        )
+    return "\n".join(result)
+
+
+def _extract_relevant_content(snapshot_text: str, user_task: str) -> str:
+    """Extract relevant content from a snapshot based on the user's task.
+
+    Falls back to simple truncation when content extraction isn't available.
+    For now, uses simple keyword-based extraction as a fallback.
+
+    Args:
+        snapshot_text: The snapshot text
+        user_task: The user's task description
+
+    Returns:
+        Extracted content relevant to the task
+    """
+    # Simple fallback - just truncate if task is provided but no LLM available
+    if len(snapshot_text) > SNAPSHOT_SUMMARIZE_THRESHOLD:
+        return _truncate_snapshot(snapshot_text)
+    return snapshot_text
+
+
+def _cfg_get(cfg: Optional[Dict[str, Any]], *keys: str, default: Any = None) -> Any:
+    """Traverse nested dict keys safely, returning ``default`` on any miss.
+
+    Canonical helper for the ``cfg.get("X", {}).get("Y", default)`` pattern
+    that appears multiple times across the codebase. Handles three common gotchas:
+
+      1. Missing intermediate keys (returns ``default``, no KeyError).
+      2. An intermediate value that's not a dict (e.g. a user wrote a string
+         where a section was expected). Returns ``default`` instead of
+         AttributeError on ``.get()``.
+      3. ``cfg is None`` (callers sometimes pass ``load_config() or None``).
+    """
+    if not isinstance(cfg, dict):
+        return default
+    node: Any = cfg
+    for key in keys:
+        if not isinstance(node, dict):
+            return default
+        if key not in node:
+            return default
+        node = node[key]
+    return node
+
+
+def _load_config() -> Dict[str, Any]:
+    """Load .nerdface/config.yaml or return empty dict if missing."""
+    config_path = get_nerdface_home() / "config.yaml"
+    if not config_path.exists():
+        return {}
+    try:
+        import yaml
+
+        with open(config_path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -80,6 +517,7 @@ def check_camofox_available() -> bool:
                 vnc_port = data.get("vncPort")
                 if isinstance(vnc_port, int) and 1 <= vnc_port <= 65535:
                     from urllib.parse import urlparse
+
                     parsed = urlparse(url)
                     host = parsed.hostname or "localhost"
                     _vnc_url = f"http://{host}:{vnc_port}"
@@ -101,7 +539,7 @@ def get_vnc_url() -> Optional[str]:
 def _get_camofox_config() -> Dict[str, Any]:
     """Return the ``browser.camofox`` config block, or an empty dict."""
     try:
-        camofox_cfg = load_config().get("browser", {}).get("camofox", {})
+        camofox_cfg = _load_config().get("browser", {}).get("camofox", {})
     except Exception as exc:
         logger.warning("camofox config check failed, defaulting to disabled: %s", exc)
         return {}
@@ -109,7 +547,7 @@ def _get_camofox_config() -> Dict[str, Any]:
 
 
 def _managed_persistence_enabled() -> bool:
-    """Return whether Hermes-managed persistence is enabled for Camofox.
+    """Return whether Nerdface-managed persistence is enabled for Camofox.
 
     When enabled, sessions use a stable profile-scoped userId so the
     Camofox server can map it to a persistent browser profile directory.
@@ -120,14 +558,19 @@ def _managed_persistence_enabled() -> bool:
     return bool(_get_camofox_config().get("managed_persistence"))
 
 
-def _camofox_identity_override(task_id: Optional[str], camofox_cfg: Dict[str, Any]) -> Optional[Dict[str, str]]:
+def _camofox_identity_override(
+    task_id: Optional[str], camofox_cfg: Dict[str, Any]
+) -> Optional[Dict[str, str]]:
     """Return an externally configured Camofox identity, if one is set.
 
     Integrations that own the visible Camofox browser can set a shared user ID
     so Hermes operates in the same browser profile instead of creating a
     separate private session.
     """
-    user_id = os.getenv("CAMOFOX_USER_ID", "").strip() or str(camofox_cfg.get("user_id") or "").strip()
+    user_id = (
+        os.getenv("CAMOFOX_USER_ID", "").strip()
+        or str(camofox_cfg.get("user_id") or "").strip()
+    )
     if not user_id:
         return None
 
@@ -181,9 +624,13 @@ def _adopt_existing_tab(session: Dict[str, Any]) -> Dict[str, Any]:
         return session
 
     try:
-        tabs = _get("/tabs", params={"userId": session["user_id"]}, timeout=5).get("tabs", [])
+        tabs = _get("/tabs", params={"userId": session["user_id"]}, timeout=5).get(
+            "tabs", []
+        )
     except Exception as exc:
-        logger.debug("Camofox tab adoption failed for %s: %s", session.get("user_id"), exc)
+        logger.debug(
+            "Camofox tab adoption failed for %s: %s", session.get("user_id"), exc
+        )
         return session
 
     if not isinstance(tabs, list) or not tabs:
@@ -200,7 +647,9 @@ def _adopt_existing_tab(session: Dict[str, Any]) -> Dict[str, Any]:
     tab_id = latest.get("tabId") if isinstance(latest, dict) else None
     if isinstance(tab_id, str) and tab_id:
         session["tab_id"] = tab_id
-        logger.debug("Adopted existing Camofox tab %s for %s", tab_id, session.get("user_id"))
+        logger.debug(
+            "Adopted existing Camofox tab %s for %s", tab_id, session.get("user_id")
+        )
 
     return session
 
@@ -238,7 +687,7 @@ def _get_session(task_id: Optional[str]) -> Dict[str, Any]:
             }
         else:
             session = {
-                "user_id": f"hermes_{uuid.uuid4().hex[:10]}",
+                "user_id": f"nerdface_{uuid.uuid4().hex[:10]}",
                 "tab_id": None,
                 "session_key": f"task_{task_id[:16]}",
                 "managed": False,
@@ -286,7 +735,9 @@ def camofox_soft_cleanup(task_id: Optional[str] = None) -> bool:
     :func:`camofox_close`.
     """
     camofox_cfg = _get_camofox_config()
-    if bool(camofox_cfg.get("managed_persistence")) or _camofox_identity_override(task_id, camofox_cfg):
+    if bool(camofox_cfg.get("managed_persistence")) or _camofox_identity_override(
+        task_id, camofox_cfg
+    ):
         _drop_session(task_id)
         logger.debug("Camofox soft cleanup for task %s (managed persistence)", task_id)
         return True
@@ -296,6 +747,7 @@ def camofox_soft_cleanup(task_id: Optional[str] = None) -> bool:
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
+
 
 def _post(path: str, body: dict, timeout: int = _DEFAULT_TIMEOUT) -> dict:
     """POST JSON to camofox and return parsed response."""
@@ -313,7 +765,9 @@ def _get(path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> dic
     return resp.json()
 
 
-def _get_raw(path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> requests.Response:
+def _get_raw(
+    path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT
+) -> requests.Response:
     """GET from camofox and return raw response (for binary data)."""
     url = f"{get_camofox_url()}{path}"
     resp = requests.get(url, params=params, timeout=timeout)
@@ -332,6 +786,7 @@ def _delete(path: str, body: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> di
 # ---------------------------------------------------------------------------
 # Tool implementations
 # ---------------------------------------------------------------------------
+
 
 def camofox_navigate(url: str, task_id: Optional[str] = None) -> str:
     """Navigate to a URL via Camofox."""
@@ -368,10 +823,7 @@ def camofox_navigate(url: str, task_id: Optional[str] = None) -> str:
                 params={"userId": session["user_id"]},
             )
             snapshot_text = snap_data.get("snapshot", "")
-            from tools.browser_tool import (
-                SNAPSHOT_SUMMARIZE_THRESHOLD,
-                _truncate_snapshot,
-            )
+
             if len(snapshot_text) > SNAPSHOT_SUMMARIZE_THRESHOLD:
                 snapshot_text = _truncate_snapshot(snapshot_text)
             result["snapshot"] = snapshot_text
@@ -383,23 +835,28 @@ def camofox_navigate(url: str, task_id: Optional[str] = None) -> str:
     except requests.HTTPError as e:
         return tool_error(f"Navigation failed: {e}", success=False)
     except requests.ConnectionError:
-        return json.dumps({
-            "success": False,
-            "error": f"Cannot connect to Camofox at {get_camofox_url()}. "
-                     "Is the server running? Start with: npm start (in camofox-browser dir) "
-                     "or: docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser",
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": f"Cannot connect to Camofox at {get_camofox_url()}. "
+                "Is the server running? Start with: npm start (in camofox-browser dir) "
+                "or: docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser",
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
 
-def camofox_snapshot(full: bool = False, task_id: Optional[str] = None,
-                     user_task: Optional[str] = None) -> str:
+def camofox_snapshot(
+    full: bool = False, task_id: Optional[str] = None, user_task: Optional[str] = None
+) -> str:
     """Get accessibility tree snapshot from Camofox."""
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         data = _get(
             f"/tabs/{session['tab_id']}/snapshot",
@@ -410,23 +867,19 @@ def camofox_snapshot(full: bool = False, task_id: Optional[str] = None,
         refs_count = data.get("refsCount", 0)
 
         # Apply same summarization logic as the main browser tool
-        from tools.browser_tool import (
-            SNAPSHOT_SUMMARIZE_THRESHOLD,
-            _extract_relevant_content,
-            _truncate_snapshot,
-        )
-
         if len(snapshot) > SNAPSHOT_SUMMARIZE_THRESHOLD:
             if user_task:
                 snapshot = _extract_relevant_content(snapshot, user_task)
             else:
                 snapshot = _truncate_snapshot(snapshot)
 
-        return json.dumps({
-            "success": True,
-            "snapshot": snapshot,
-            "element_count": refs_count,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "snapshot": snapshot,
+                "element_count": refs_count,
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
@@ -436,7 +889,9 @@ def camofox_click(ref: str, task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         # Strip @ prefix if present (our tool convention)
         clean_ref = ref.lstrip("@")
@@ -445,11 +900,13 @@ def camofox_click(ref: str, task_id: Optional[str] = None) -> str:
             f"/tabs/{session['tab_id']}/click",
             {"userId": session["user_id"], "ref": clean_ref},
         )
-        return json.dumps({
-            "success": True,
-            "clicked": clean_ref,
-            "url": data.get("url", ""),
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "clicked": clean_ref,
+                "url": data.get("url", ""),
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
@@ -459,7 +916,9 @@ def camofox_type(ref: str, text: str, task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         clean_ref = ref.lstrip("@")
 
@@ -467,11 +926,13 @@ def camofox_type(ref: str, text: str, task_id: Optional[str] = None) -> str:
             f"/tabs/{session['tab_id']}/type",
             {"userId": session["user_id"], "ref": clean_ref, "text": text},
         )
-        return json.dumps({
-            "success": True,
-            "typed": text,
-            "element": clean_ref,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "typed": text,
+                "element": clean_ref,
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
@@ -481,7 +942,9 @@ def camofox_scroll(direction: str, task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         _post(
             f"/tabs/{session['tab_id']}/scroll",
@@ -497,7 +960,9 @@ def camofox_back(task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         data = _post(
             f"/tabs/{session['tab_id']}/back",
@@ -513,7 +978,9 @@ def camofox_press(key: str, task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         _post(
             f"/tabs/{session['tab_id']}/press",
@@ -548,7 +1015,9 @@ def camofox_get_images(task_id: Optional[str] = None) -> str:
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         import re
 
@@ -571,28 +1040,33 @@ def camofox_get_images(task_id: Optional[str] = None) -> str:
                 # Look for URL on the next line
                 src = ""
                 if i + 1 < len(lines):
-                    url_match = re.search(r'/url:\s*(\S+)', lines[i + 1].strip())
+                    url_match = re.search(r"/url:\s*(\S+)", lines[i + 1].strip())
                     if url_match:
                         src = url_match.group(1)
                 if alt or src:
                     images.append({"src": src, "alt": alt})
 
-        return json.dumps({
-            "success": True,
-            "images": images,
-            "count": len(images),
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "images": images,
+                "count": len(images),
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
 
-def camofox_vision(question: str, annotate: bool = False,
-                   task_id: Optional[str] = None) -> str:
+def camofox_vision(
+    question: str, annotate: bool = False, task_id: Optional[str] = None
+) -> str:
     """Take a screenshot and analyze it with vision AI via Camofox."""
     try:
         session = _get_session(task_id)
         if not session["tab_id"]:
-            return tool_error("No browser session. Call browser_navigate first.", success=False)
+            return tool_error(
+                "No browser session. Call browser_navigate first.", success=False
+            )
 
         # Get screenshot as binary PNG
         resp = _get_raw(
@@ -601,10 +1075,11 @@ def camofox_vision(question: str, annotate: bool = False,
         )
 
         # Save screenshot to cache
-        from hermes_constants import get_hermes_home
-        screenshots_dir = get_hermes_home() / "browser_screenshots"
+        screenshots_dir = get_nerdface_home() / "browser_screenshots"
         screenshots_dir.mkdir(parents=True, exist_ok=True)
-        screenshot_path = str(screenshots_dir / f"browser_screenshot_{uuid.uuid4().hex[:8]}.png")
+        screenshot_path = str(
+            screenshots_dir / f"browser_screenshot_{uuid.uuid4().hex[:8]}.png"
+        )
 
         with open(screenshot_path, "wb") as f:
             f.write(resp.content)
@@ -628,6 +1103,7 @@ def camofox_vision(question: str, annotate: bool = False,
         # The screenshot image itself cannot be redacted, but at least the
         # text-based accessibility tree snippet won't leak secret values.
         from agent.redact import redact_sensitive_text
+
         annotation_context = redact_sensitive_text(annotation_context)
 
         # Send to vision LLM
@@ -639,8 +1115,8 @@ def camofox_vision(question: str, annotate: bool = False,
         )
 
         try:
-            _cfg = load_config()
-            _vision_cfg = cfg_get(_cfg, "auxiliary", "vision", default={})
+            _cfg = _load_config()
+            _vision_cfg = _cfg_get(_cfg, "auxiliary", "vision", default={})
             _vision_timeout = float(_vision_cfg.get("timeout", 120))
             _vision_temperature = float(_vision_cfg.get("temperature", 0.1))
         except Exception:
@@ -648,33 +1124,42 @@ def camofox_vision(question: str, annotate: bool = False,
             _vision_temperature = 0.1
 
         response = call_llm(
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": vision_prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{img_b64}",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": vision_prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{img_b64}",
+                            },
                         },
-                    },
-                ],
-            }],
+                    ],
+                }
+            ],
             task="vision",
             temperature=_vision_temperature,
             timeout=_vision_timeout,
         )
-        analysis = (response.choices[0].message.content or "").strip() if response.choices else ""
+        analysis = (
+            (response.choices[0].message.content or "").strip()
+            if response.choices
+            else ""
+        )
 
         # Redact secrets the vision LLM may have read from the screenshot.
         from agent.redact import redact_sensitive_text
+
         analysis = redact_sensitive_text(analysis)
 
-        return json.dumps({
-            "success": True,
-            "analysis": analysis,
-            "screenshot_path": screenshot_path,
-        })
+        return json.dumps(
+            {
+                "success": True,
+                "analysis": analysis,
+                "screenshot_path": screenshot_path,
+            }
+        )
     except Exception as e:
         return tool_error(str(e), success=False)
 
@@ -685,15 +1170,14 @@ def camofox_console(clear: bool = False, task_id: Optional[str] = None) -> str:
     Camofox does not expose browser console logs via its REST API.
     Returns an empty result with a note.
     """
-    return json.dumps({
-        "success": True,
-        "console_messages": [],
-        "js_errors": [],
-        "total_messages": 0,
-        "total_errors": 0,
-        "note": "Console log capture is not available with the Camofox backend. "
-                "Use browser_snapshot or browser_vision to inspect page state.",
-    })
-
-
-
+    return json.dumps(
+        {
+            "success": True,
+            "console_messages": [],
+            "js_errors": [],
+            "total_messages": 0,
+            "total_errors": 0,
+            "note": "Console log capture is not available with the Camofox backend. "
+            "Use browser_snapshot or browser_vision to inspect page state.",
+        }
+    )
