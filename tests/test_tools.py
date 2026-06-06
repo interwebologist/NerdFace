@@ -357,5 +357,116 @@ class TestToolRegistry(unittest.TestCase):
         self.assertEqual(data["exit_code"], 1)
 
 
+class TestBrowserTools(unittest.TestCase):
+    """Test browser tools (camofox backend)."""
+
+    @patch("tools.browser_camofox.requests.get")
+    @patch("tools.browser_camofox.requests.post")
+    def test_browser_navigate_success(self, mock_post, mock_get):
+        """Test browser_navigate tool with successful navigation."""
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"vncPort": 5900}
+        mock_post.return_value.raise_for_status = MagicMock()
+        mock_post.return_value.json.return_value = {
+            "tabId": "tab123",
+            "url": "https://example.com",
+            "title": "Example",
+        }
+
+        os.environ["CAMOFOX_URL"] = "http://localhost:9377"
+        try:
+            result = registry.dispatch(
+                "browser_navigate", {"url": "https://example.com"}
+            )
+            data = json.loads(result)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["url"], "https://example.com")
+        finally:
+            del os.environ["CAMOFOX_URL"]
+
+    @patch("tools.browser_camofox.requests.get")
+    @patch("tools.browser_camofox.requests.post")
+    def test_browser_snapshot_success(self, mock_post, mock_get):
+        """Test browser_snapshot tool with successful snapshot."""
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "tabId": "tab123",
+            "url": "https://example.com",
+            "title": "Example",
+        }
+        mock_post.return_value.raise_for_status = MagicMock()
+        mock_post.return_value.json.return_value = {
+            "snapshot": "- button 'Submit' [e1]\n- input 'Email' [e2]",
+            "refsCount": 2,
+        }
+
+        os.environ["CAMOFOX_URL"] = "http://localhost:9377"
+        try:
+            result = registry.dispatch("browser_snapshot", {"full": False})
+            data = json.loads(result)
+            self.assertTrue(data["success"])
+            self.assertIn("snapshot", data)
+            self.assertIn("element_count", data)
+        finally:
+            del os.environ["CAMOFOX_URL"]
+
+    @patch("tools.browser_camofox.requests.get")
+    @patch("tools.browser_camofox.requests.post")
+    def test_browser_click_success(self, mock_post, mock_get):
+        """Test browser_click tool with successful click."""
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "tabId": "tab123",
+            "url": "https://example.com",
+            "title": "Example",
+        }
+        mock_post.return_value.raise_for_status = MagicMock()
+        mock_post.return_value.json.return_value = {
+            "tabId": "tab123",
+            "url": "https://example.com/next",
+        }
+
+        os.environ["CAMOFOX_URL"] = "http://localhost:9377"
+        try:
+            registry.dispatch("browser_navigate", {"url": "https://example.com"})
+            result = registry.dispatch("browser_click", {"ref": "btn_submit"})
+            data = json.loads(result)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["clicked"], "btn_submit")
+        finally:
+            del os.environ["CAMOFOX_URL"]
+
+    @patch("tools.browser_camofox.requests.get")
+    @patch("tools.browser_camofox.requests.post")
+    def test_browser_type_success(self, mock_post, mock_get):
+        """Test browser_type tool with successful typing."""
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "tabId": "tab123",
+            "url": "https://example.com",
+            "title": "Example",
+        }
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        os.environ["CAMOFOX_URL"] = "http://localhost:9377"
+        try:
+            result = registry.dispatch(
+                "browser_type", {"ref": "input_email", "text": "test@example.com"}
+            )
+            data = json.loads(result)
+            self.assertTrue(data["success"])
+            self.assertEqual(data["typed"], "test@example.com")
+        finally:
+            del os.environ["CAMOFOX_URL"]
+
+    def test_browser_console_returns_note(self):
+        """Test browser_console tool returns appropriate note."""
+        result = registry.dispatch("browser_console", {})
+        data = json.loads(result)
+        self.assertTrue(data["success"])
+        self.assertIn("note", data)
+        self.assertIn("not available", data["note"].lower())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

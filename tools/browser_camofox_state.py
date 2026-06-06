@@ -30,18 +30,6 @@ def get_camofox_state_dir() -> Path:
     return get_nerdface_home() / CAMOFOX_STATE_DIR_NAME / CAMOFOX_STATE_SUBDIR
 
 
-def get_nerdface_dir(subpath: str) -> Path:
-    """Return subpath under .nerdface directory.
-
-    Args:
-        subpath: Path relative to .nerdface (e.g., "browser_auth/camofox")
-
-    Returns:
-        Absolute Path to the subdirectory
-    """
-    return get_nerdface_home() / subpath
-
-
 def get_camofox_identity(task_id: Optional[str] = None) -> Dict[str, str]:
     """Return the stable Nerdface-managed Camofox identity for this profile.
 
