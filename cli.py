@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CLI Interface for SkunkAgent - Simple stdin-based
+CLI Interface for NerdFace - Simple stdin-based
 """
 
 import sys
