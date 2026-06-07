@@ -57,9 +57,13 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
     if not CHAT_HISTORY:
         sys_p = load_system_prompt()
         if sys_p:
-            CHAT_HISTORY.append({"role": "system", "content": sys_p})
+            msg = {"role": "system", "content": sys_p}
+            CHAT_HISTORY.append(msg)
+            logger.debug("Added to CHAT_HISTORY: %s", msg)
 
-    CHAT_HISTORY.append({"role": "user", "content": prompt})
+    msg = {"role": "user", "content": prompt}
+    CHAT_HISTORY.append(msg)
+    logger.debug("Added to CHAT_HISTORY: %s", msg)
 
     iterations = 0
     while iterations < max_iterations:
@@ -69,6 +73,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
 
         iterations += 1
         tools = registry.get_definitions(set(registry.get_all_tool_names()), quiet=True)
+        logger.debug("LLM REQUEST: %s", json.dumps({"messages": CHAT_HISTORY, "tools": tools}, indent=2))
         try:
             res = client.chat.completions.create(
                 model=model, messages=CHAT_HISTORY, tools=tools, timeout=360
@@ -77,34 +82,37 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
             logger.error("OpenAI API error: %s", str(e), exc_info=True)
             if "Failed to parse tool call arguments as JSON" in str(e):
                 error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments. Please reformat your request."
-                CHAT_HISTORY.append(
-                    {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
-                            {
-                                "id": "error_tool_call",
-                                "type": "function",
-                                "function": {
-                                    "name": "error_handler",
-                                    "arguments": "{}",
-                                },
-                            }
-                        ],
-                    }
-                )
-                CHAT_HISTORY.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": "error_tool_call",
-                        "content": json.dumps({"error": error_msg}),
-                    }
-                )
+                msg = {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "error_tool_call",
+                            "type": "function",
+                            "function": {
+                                "name": "error_handler",
+                                "arguments": "{}",
+                            },
+                        }
+                    ],
+                }
+                CHAT_HISTORY.append(msg)
+                logger.debug("Added to CHAT_HISTORY: %s", msg)
+                msg = {
+                    "role": "tool",
+                    "tool_call_id": "error_tool_call",
+                    "content": json.dumps({"error": error_msg}),
+                }
+                CHAT_HISTORY.append(msg)
+                logger.debug("Added to CHAT_HISTORY: %s", msg)
                 return error_msg
             raise
         msg = res.choices[0].message
+        logger.debug("LLM RESPONSE: %s", json.dumps(msg.model_dump(exclude_none=True), indent=2))
 
-        CHAT_HISTORY.append(msg.model_dump(exclude_none=True))
+        msg_dict = msg.model_dump(exclude_none=True)
+        CHAT_HISTORY.append(msg_dict)
+        logger.debug("Added to CHAT_HISTORY: %s", msg_dict)
 
         if not msg.tool_calls:
             return str(msg.content)
@@ -115,13 +123,13 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                 try:
                     args = json.loads(call.function.arguments)
                     out = registry.dispatch(func_name, args)
-                    CHAT_HISTORY.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.id,
-                            "content": out,
-                        }
-                    )
+                    msg = {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": out,
+                    }
+                    CHAT_HISTORY.append(msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", msg)
                 except Exception as e:
                     logger.error(
                         "Tool execution error for %s: %s",
@@ -129,13 +137,13 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                         str(e),
                         exc_info=True,
                     )
-                    CHAT_HISTORY.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.id,
-                            "content": f"Error: {str(e)}",
-                        }
-                    )
+                    msg = {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": f"Error: {str(e)}",
+                    }
+                    CHAT_HISTORY.append(msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", msg)
 
     return "Error: Maximum iterations reached without final response."
 
