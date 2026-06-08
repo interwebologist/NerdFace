@@ -31,10 +31,10 @@ A hackable, lightweight local agent hardened for production
 - [X] **API**
 - [X] **Web Browser** - Camofox: self hosted, bypass bot protections.local , no pay, fast
 
-- [X] **System Design Patterns for Small languge models**
+- [X] **System Design Patterns for Small languge models** - tools schema configurable though default is hybrid schema in system prompt only, both per iteration tool schema, and on tools call schema errors. This cut down context by a massive about. tool naming focused for SLMs. 
 - [X] **Compression** - head / tail with summerize the middle. tool calls clean up when not needed. 4 part algorithm. patachute for LLM gateway protection as 2nd safety
 - [X] **Reduced Attack Vector** on popular offering
-- [ ] **NerdPrompt** - allow to be used with NerdPrompt in terminal
+- [ ] **NerdPrompt** - allow to be used with NerdPrompt in terminal. THINK: ASCII OLDSCHOOL BBS output.
 
 ## Guardrails Overview
 
