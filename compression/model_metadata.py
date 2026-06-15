@@ -3,7 +3,6 @@
 from typing import Any
 
 CHARS_PER_TOKEN = 4
-MINIMUM_CONTEXT_LENGTH = 8192
 
 
 def estimate_messages_tokens_rough(messages: list[dict[str, Any]]) -> int:

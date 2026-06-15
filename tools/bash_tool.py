@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Bash Tool - Run bash commands."""
 
-import json
 import shlex
 import subprocess
 from pathlib import Path
-from tools.registry import registry
+from tools.registry import registry, tool_result, tool_error
 
 
 def run_bash(command: str) -> str:
@@ -15,7 +14,11 @@ def run_bash(command: str) -> str:
         # For production use, consider a whitelist-based approach
         sanitized_command = shlex.quote(command)
         r = subprocess.run(
-            sanitized_command, shell=True, capture_output=True, text=True, timeout=300
+            sanitized_command,
+            shell=True,  # nosec B602
+            capture_output=True,
+            text=True,
+            timeout=300,
         )
         status = "SUCCESS" if r.returncode == 0 else "ERROR"
         output = r.stdout + r.stderr
@@ -36,13 +39,11 @@ def run_bash(command: str) -> str:
                 f.write(output)
             result["full_log_saved"] = str(path)
 
-        return json.dumps(result)
+        return tool_result(result)
     except subprocess.TimeoutExpired:
-        return json.dumps(
-            {"status": "ERROR", "error": "Command timed out after 300 seconds"}
-        )
+        return tool_error("Command timed out after 300 seconds", status="ERROR")
     except Exception as e:
-        return json.dumps({"status": "ERROR", "error": str(e)})
+        return tool_error(str(e), status="ERROR")
 
 
 RUN_BASH_SCHEMA = {

@@ -27,11 +27,8 @@ _SUMMARY_PREFIX = (
     "Respond ONLY to latest user message after this summary."
 )
 
-_SUMMARY_RATIO = 0.20
 _SUMMARY_TOKENS_CEILING = 12_000
-_PRUNED_TOOL_PLACEHOLDER = "[Old tool output cleared]"
 
-_CONTENT_TAIL = 1500
 _TOOL_ARGS_MAX = 1500
 _TOOL_ARGS_HEAD = 1200
 
@@ -94,7 +91,10 @@ def _summarize_tool_result(tool_name: str, tool_args: str, tool_content: str) ->
     if "exit" in tool_content.lower() or tool_name == "run_bash":
         exit_match = re.search(r"exit\s+(?:code\s+)?(\d+)", tool_content, re.IGNORECASE)
         exit_code = exit_match.group(1) if exit_match else "unknown"
-        return f"[{tool_name}] ran `{args_preview}` -> exit {exit_code}, {content_len} chars"
+        return (
+            f"[{tool_name}] ran `{args_preview}` -> "
+            f"exit {exit_code}, {content_len} chars"
+        )
     elif tool_name == "read_file":
         return f"[{tool_name}] read file `{args_preview}` ({content_len} chars)"
     return f"[{tool_name}] executed ({content_len} chars)"
@@ -161,8 +161,8 @@ class ContextCompressor:
         self.quiet_mode = quiet_mode
 
         self.tail_token_budget = int(self.threshold_tokens * summary_target_ratio)
-        self.max_summary_tokens = min(
-            self.context_length * 0.05, _SUMMARY_TOKENS_CEILING
+        self.max_summary_tokens = int(
+            min(self.context_length * 0.05, _SUMMARY_TOKENS_CEILING)
         )
 
     def should_compress(self, prompt_tokens: int | None = None) -> bool:

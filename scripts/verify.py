@@ -2,12 +2,27 @@ import subprocess
 import json
 import sys
 import os
+import shlex
+
+# Descriptions of verification tools
+TOOL_DESCRIPTIONS = {
+    "Linter (Ruff)": "Fast Python linter (PEP 8, common bugs, import sorting).",
+    "Formatter (Ruff)": "Checks code style and consistent indentation.",
+    "Type Check (Mypy)": "Static type checker to find logic errors and type mismatches.",
+    "Security (Bandit)": "Security linter to find vulnerabilities (hardcoded keys, unsafe exec).",
+    "Dead Code (Vulture)": "Finds unused functions, classes, and global variables.",
+    "JSON Syntax Check": "Ensures all JSON configuration files are syntactically valid.",
+    "Tests (Pytest)": "Runs automated test suite to verify behavioral correctness.",
+}
 
 
 def run_check(name, cmd):
     """Runs a command and returns a structured result."""
-    print(f"Running {name}...")
-    proc = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+    desc = TOOL_DESCRIPTIONS.get(name, "")
+    print(f"Running {name}... ({desc})")
+    proc = subprocess.run(
+        shlex.split(cmd), capture_output=True, text=True, shell=False
+    )
     # Special case for pytest: "no tests ran" is not a failure
     if name == "Tests (Pytest)" and "no tests ran" in proc.stdout:
         return {
@@ -26,7 +41,9 @@ def run_check(name, cmd):
 
 def check_json_files():
     """Check all JSON files for valid syntax."""
-    print("Checking JSON files...")
+    name = "JSON Syntax Check"
+    desc = TOOL_DESCRIPTIONS.get(name, "")
+    print(f"Checking {name}... ({desc})")
     json_files = []
     for root, dirs, files in os.walk("."):
         # Skip hidden directories and common build/cache directories
@@ -52,14 +69,14 @@ def check_json_files():
 
     if errors:
         return {
-            "tool": "JSON Syntax Check",
+            "tool": name,
             "success": False,
-            "output": "\\n".join(errors),
+            "output": "\n".join(errors),
             "error": "",
         }
     else:
         return {
-            "tool": "JSON Syntax Check",
+            "tool": name,
             "success": True,
             "output": f"Passed ({len(json_files)} files checked)",
             "error": "",
@@ -67,16 +84,17 @@ def check_json_files():
 
 
 def main():
-    # 1. Ruff: Linting & Formatting (2026 Standard)
-    # Using --output-format json as per v0.15+ docs
+    # 1. Static Analysis & Linting
     checks = [
         run_check("Linter (Ruff)", "uv run ruff check --output-format json ."),
         run_check("Formatter (Ruff)", "uv run ruff format --check ."),
-        check_json_files(),  # Add JSON syntax check
+        run_check("Type Check (Mypy)", "uv run mypy . --ignore-missing-imports"),
+        run_check("Security (Bandit)", "uv run bandit -r . -x ./tests,./.venv -ll"),
+        run_check("Dead Code (Vulture)", "uv run vulture . --exclude .venv,tests"),
+        check_json_files(),
     ]
 
-    # 2. Pytest: Execution
-    # Requires pytest-json-report installed
+    # 2. Pytest Execution
     checks.append(
         run_check(
             "Tests (Pytest)",
@@ -92,7 +110,11 @@ def main():
         sys.exit(0)
     else:
         print("\n❌ CHECKS FAILED. See summary below:")
-        print(json.dumps(failed, indent=2))
+        for f in failed:
+            print(f"\n--- {f['tool']} Failure ---")
+            print(f["output"])
+            if f["error"]:
+                print(f"Error output: {f['error']}")
         sys.exit(1)
 
 

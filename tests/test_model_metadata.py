@@ -15,7 +15,6 @@ from compression.model_metadata import (
     estimate_messages_tokens_rough,
     get_model_context_length,
     CHARS_PER_TOKEN,
-    MINIMUM_CONTEXT_LENGTH,
 )
 
 
@@ -25,10 +24,6 @@ class TestModelMetadata(unittest.TestCase):
     def test_chars_per_token_constant(self):
         """Test CHARS_PER_TOKEN constant."""
         self.assertEqual(CHARS_PER_TOKEN, 4)
-
-    def test_minimum_context_length(self):
-        """Test MINIMUM_CONTEXT_LENGTH constant."""
-        self.assertEqual(MINIMUM_CONTEXT_LENGTH, 8192)
 
     def test_estimate_tokens_basic(self):
         """Test basic token estimation."""

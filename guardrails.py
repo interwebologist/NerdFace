@@ -14,7 +14,10 @@ class Guardrails:
             if not result[1].get("PromptInjection", True):
                 return (
                     True,
-                    f"Prompt injection detected: risk score {result[2].get('PromptInjection', 0)}",
+                    (
+                        f"Prompt injection detected: risk score "
+                        f"{result[2].get('PromptInjection', 0)}"
+                    ),
                 )
         except Exception:
             pass

@@ -1,7 +1,6 @@
 """Web Search Tool - DuckDuckGo search."""
 
-import json
-from tools.registry import registry
+from tools.registry import registry, tool_result, tool_error
 
 
 def web_search(query: str, max_results: int = 3) -> str:
@@ -12,7 +11,7 @@ def web_search(query: str, max_results: int = 3) -> str:
         with DDGS() as ddgs:
             results = [r for r in ddgs.text(query, max_results=max_results)]
             if not results:
-                return json.dumps({"error": "No results found."})
+                return tool_error("No results found.")
 
             formatted_results = []
             for r in results:
@@ -24,13 +23,11 @@ def web_search(query: str, max_results: int = 3) -> str:
                     }
                 )
 
-            return json.dumps({"query": query, "results": formatted_results})
+            return tool_result(query=query, results=formatted_results)
     except ImportError:
-        return json.dumps(
-            {"error": "ddgs package not installed. Install with: pip install ddgs"}
-        )
+        return tool_error("ddgs package not installed. Install with: pip install ddgs")
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return tool_error(str(e))
 
 
 def check_web_search_requirements() -> bool:
@@ -45,7 +42,10 @@ def check_web_search_requirements() -> bool:
 
 WEB_SEARCH_SCHEMA = {
     "name": "web_search",
-    "description": "Search the web using DuckDuckGo. Returns search results with title, snippet, and URL.",
+    "description": (
+        "Search the web using DuckDuckGo. "
+        "Returns search results with title, snippet, and URL."
+    ),
     "parameters": {
         "type": "object",
         "properties": {

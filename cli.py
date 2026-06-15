@@ -10,6 +10,7 @@ import os
 
 from state import SimpleSessionDB
 from agent import run as agent_run
+from llm_client import DEFAULT_MODEL
 from compression.context_compressor import ContextCompressor
 
 logging.basicConfig(
@@ -184,7 +185,7 @@ def process_chat_message(
         estimate = estimate_messages_tokens_rough(agent_history)
         if estimate > 100000:
             print(f"Warning: Context size ({estimate} tokens) is getting large")
-            compressor = ContextCompressor()
+            compressor = ContextCompressor(model=DEFAULT_MODEL)
             compressor.compress(agent_history)
 
     return current_session_id, agent_history

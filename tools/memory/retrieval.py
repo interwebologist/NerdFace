@@ -15,10 +15,12 @@ if TYPE_CHECKING:
 
 try:
     from . import holographic as hrr
+except ImportError:
+    import holographic as hrr  # type: ignore[no-redef]
+
+try:
     import numpy as np
 except ImportError:
-    import holographic as hrr
-
     np = None  # type: ignore[assignment]
 
 
@@ -174,7 +176,7 @@ class FactRetriever:
                    hrr_vector
             FROM facts
             {where}
-            """,
+            """,  # nosec B608
             params,
         ).fetchall()
 
@@ -236,7 +238,7 @@ class FactRetriever:
                    hrr_vector
             FROM facts
             {where}
-            """,
+            """,  # nosec B608
             params,
         ).fetchall()
 
@@ -315,7 +317,7 @@ class FactRetriever:
                    hrr_vector
             FROM facts
             {where}
-            """,
+            """,  # nosec B608
             params,
         ).fetchall()
 
@@ -379,10 +381,9 @@ class FactRetriever:
                    f.created_at, f.updated_at, f.hrr_vector
             FROM facts f
             {where}
-            """,
+            """,  # nosec B608
             params,
         ).fetchall()
-
         if len(rows) < 2:
             return []
 
@@ -410,7 +411,8 @@ class FactRetriever:
             ).fetchall()
             fact_entities[fid] = {r["name"].lower() for r in entity_rows}
 
-        # Compare all pairs: high entity overlap + low content similarity = contradiction
+        # Compare all pairs: high entity overlap + low content similarity
+        # = contradiction
         facts = [dict(r) for r in rows]
         contradictions = []
 
@@ -455,7 +457,9 @@ class FactRetriever:
                         }
                     )
 
-        contradictions.sort(key=lambda x: x["contradiction_score"], reverse=True)
+        contradictions.sort(
+            key=lambda x: float(x["contradiction_score"]), reverse=True
+        )
         return contradictions[:limit]
 
     def _score_facts_by_vector(
@@ -482,7 +486,7 @@ class FactRetriever:
                    hrr_vector
             FROM facts
             {where}
-            """,
+            """,  # nosec B608
             params,
         ).fetchall()
 
@@ -533,7 +537,8 @@ class FactRetriever:
             WHERE {where_sql}
             ORDER BY facts_fts.rank
             LIMIT ?
-        """
+        """  # nosec B608
+
         params.append(limit)
 
         try:

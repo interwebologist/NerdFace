@@ -181,7 +181,9 @@ class ToolRegistry:
         return self._snapshot_state()[1]
 
     def _evaluate_toolset_check(self, toolset: str, check: Callable | None) -> bool:
-        """Run a toolset check, treating missing or failing checks as unavailable/available."""
+        """Run a toolset check, treating missing or failing checks as
+        unavailable/available.
+        """
         if not check:
             return True
         try:

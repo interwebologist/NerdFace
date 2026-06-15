@@ -47,7 +47,8 @@ CAMOFOX_TOOL_SCHEMAS = [
     {
         "name": "browser_navigate",
         "description": (
-            "Navigate to a URL. Use this to visit websites, login pages, or any web resource.\n\n"
+            "Navigate to a URL. Use this to visit websites, login pages, "
+            "or any web resource.\n\n"
             "**Usage:**\n"
             "- Call this first to open a page before other browser operations\n"
             "- The URL must be accessible from the Camofox server\n"
@@ -233,7 +234,9 @@ CAMOFOX_TOOL_SCHEMAS = [
                 },
                 "annotate": {
                     "type": "boolean",
-                    "description": "Include accessibility tree in context (default: False)",
+                    "description": (
+                        "Include accessibility tree in context (default: False)"
+                    ),
                     "default": False,
                 },
             },
@@ -261,7 +264,9 @@ CAMOFOX_TOOL_SCHEMAS = [
                 },
                 "expression": {
                     "type": "string",
-                    "description": "JavaScript expression to evaluate (no-op for Camofox)",
+                    "description": (
+                        "JavaScript expression to evaluate (no-op for Camofox)"
+                    ),
                 },
             },
             "required": [],
@@ -412,7 +417,8 @@ def _truncate_snapshot(snapshot_text: str, max_chars: int = 8000) -> str:
     remaining = len(lines) - len(result)
     if remaining > 0:
         result.append(
-            f"\n[... {remaining} more lines truncated, use browser_snapshot for full content]"
+            f"\n[... {remaining} more lines truncated, "
+            "use browser_snapshot for full content]"
         )
     return "\n".join(result)
 
@@ -756,7 +762,9 @@ def _post(path: str, body: dict, timeout: int = _DEFAULT_TIMEOUT) -> dict:
     return resp.json()
 
 
-def _get(path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+def _get(
+    path: str, params: Optional[dict] = None, timeout: int = _DEFAULT_TIMEOUT
+) -> dict:
     """GET from camofox and return parsed response."""
     url = f"{get_camofox_url()}{path}"
     resp = requests.get(url, params=params, timeout=timeout)
@@ -765,7 +773,7 @@ def _get(path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> dic
 
 
 def _get_raw(
-    path: str, params: dict = None, timeout: int = _DEFAULT_TIMEOUT
+    path: str, params: Optional[dict] = None, timeout: int = _DEFAULT_TIMEOUT
 ) -> requests.Response:
     """GET from camofox and return raw response (for binary data)."""
     url = f"{get_camofox_url()}{path}"
@@ -774,7 +782,9 @@ def _get_raw(
     return resp
 
 
-def _delete(path: str, body: dict = None, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+def _delete(
+    path: str, body: Optional[dict] = None, timeout: int = _DEFAULT_TIMEOUT
+) -> dict:
     """DELETE to camofox and return parsed response."""
     url = f"{get_camofox_url()}{path}"
     resp = requests.delete(url, json=body, timeout=timeout)
@@ -837,9 +847,12 @@ def camofox_navigate(url: str, task_id: Optional[str] = None) -> str:
         return json.dumps(
             {
                 "success": False,
-                "error": f"Cannot connect to Camofox at {get_camofox_url()}. "
-                "Is the server running? Start with: npm start (in camofox-browser dir) "
-                "or: docker run -p 9377:9377 -e CAMOFOX_PORT=9377 jo-inc/camofox-browser",
+                "error": (
+                    f"Cannot connect to Camofox at {get_camofox_url()}. "
+                    "Is the server running? Start with: npm start "
+                    "(in camofox-browser dir) or: docker run -p 9377:9377 "
+                    "-e CAMOFOX_PORT=9377 jo-inc/camofox-browser"
+                ),
             }
         )
     except Exception as e:
@@ -1094,7 +1107,10 @@ def camofox_vision(
                     f"/tabs/{session['tab_id']}/snapshot",
                     params={"userId": session["user_id"]},
                 )
-                annotation_context = f"\n\nAccessibility tree (element refs for interaction):\n{snap_data.get('snapshot', '')[:3000]}"
+                annotation_context = (
+                    f"\n\nAccessibility tree (element refs for interaction):\n"
+                    f"{snap_data.get('snapshot', '')[:3000]}"
+                )
             except Exception:
                 pass
 

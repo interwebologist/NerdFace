@@ -114,7 +114,8 @@ class MemoryStore:
         self._conn: sqlite3.Connection | None = None
         self._lock = threading.RLock()
         self._connect()
-        self._conn.row_factory = sqlite3.Row
+        if self._conn is not None:
+            self._conn.row_factory = sqlite3.Row
         self._init_db()
 
     # ------------------------------------------------------------------
@@ -134,7 +135,14 @@ class MemoryStore:
     # ------------------------------------------------------------------
 
     def _init_db(self) -> None:
-        """Create tables, indexes, and triggers if they do not exist. Enable WAL mode."""
+        """Create tables, indexes, and triggers if they do not exist.
+        Enable WAL mode.
+        """
+        if self._conn is None:
+            self._connect()
+        if self._conn is None:
+            raise RuntimeError("Database connection not established")
+
         self._conn.executescript(_SCHEMA)
         # Migrate: add hrr_vector column if missing (safe for existing databases)
         columns = {
@@ -241,7 +249,7 @@ class MemoryStore:
                   {category_clause}
                 ORDER BY fts.rank, f.trust_score DESC
                 LIMIT ?
-            """
+            """  # nosec B608
 
             with self._db_cursor() as cursor:
                 rows = cursor.execute(sql, params).fetchall()
@@ -252,7 +260,8 @@ class MemoryStore:
                 placeholders = ",".join("?" * len(ids))
                 with self._db_cursor() as cursor:
                     cursor.execute(
-                        f"UPDATE facts SET retrieval_count = retrieval_count + 1 WHERE fact_id IN ({placeholders})",
+                        "UPDATE facts SET retrieval_count = retrieval_count + 1 "
+                        f"WHERE fact_id IN ({placeholders})",  # nosec B608
                         ids,
                     )
 
@@ -298,7 +307,7 @@ class MemoryStore:
 
                 params.append(fact_id)
                 cursor.execute(
-                    f"UPDATE facts SET {', '.join(assignments)} WHERE fact_id = ?",
+                    f"UPDATE facts SET {', '.join(assignments)} WHERE fact_id = ?",  # nosec B608
                     params,
                 )
 
@@ -369,7 +378,7 @@ class MemoryStore:
                   {category_clause}
                 ORDER BY trust_score DESC
                 LIMIT ?
-            """
+            """  # nosec B608
             with self._db_cursor() as cursor:
                 rows = cursor.execute(sql, params).fetchall()
                 return [self._row_to_dict(r) for r in rows]
@@ -385,7 +394,8 @@ class MemoryStore:
         """
         with self._lock:
             row = self._conn.execute(
-                "SELECT fact_id, trust_score, helpful_count FROM facts WHERE fact_id = ?",
+                "SELECT fact_id, trust_score, helpful_count "
+                "FROM facts WHERE fact_id = ?",
                 (fact_id,),
             ).fetchone()
             if row is None:
@@ -521,7 +531,8 @@ class MemoryStore:
             bank_name = f"cat:{category}"
             with self._db_cursor() as cursor:
                 rows = cursor.execute(
-                    "SELECT hrr_vector FROM facts WHERE category = ? AND hrr_vector IS NOT NULL",
+                    "SELECT hrr_vector FROM facts "
+                    "WHERE category = ? AND hrr_vector IS NOT NULL",
                     (category,),
                 ).fetchall()
 
@@ -542,7 +553,8 @@ class MemoryStore:
             with self._db_cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO memory_banks (bank_name, vector, dim, fact_count, updated_at)
+                    INSERT INTO memory_banks
+                        (bank_name, vector, dim, fact_count, updated_at)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                     ON CONFLICT(bank_name) DO UPDATE SET
                         vector = excluded.vector,

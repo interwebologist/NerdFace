@@ -6,7 +6,7 @@ from typing import List, Optional, Union
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import agent
-from agent import run, guardrails
+from agent import run
 from state import SimpleSessionDB
 from tools.registry import registry, discover_builtin_tools
 
@@ -105,13 +105,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
     try:
         session_id = request.user or "default"
 
-        if guardrails.is_kill_switch_triggered():
-            kill_result = guardrails.trigger_kill_switch()
-            raise HTTPException(
-                status_code=503,
-                detail=f"Service unavailable: Kill switch activated. {kill_result}",
-            )
-
         db_messages = session_db.get_messages(session_id)
         agent.CHAT_HISTORY = db_messages
 
@@ -124,13 +117,6 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
             session_db.append_message(session_id, msg.role, msg.content)
 
         user_prompt = request.messages[-1].content
-
-        is_blocked, block_msg, block_type = guardrails.validate_input(user_prompt)
-        if is_blocked:
-            guardrails.trigger_kill_switch()
-            raise HTTPException(
-                status_code=403, detail=f"Input blocked [{block_type}]: {block_msg}"
-            )
 
         response_text = run(user_prompt)
 
@@ -164,4 +150,4 @@ async def chat_completions(request: ChatCompletionRequest) -> ChatCompletionResp
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

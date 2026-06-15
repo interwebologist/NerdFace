@@ -23,6 +23,8 @@ class SimpleSessionDB:
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
             self._connect()
+        if self._conn is None:
+            raise RuntimeError("Failed to connect to database")
         return self._conn
 
     def _init_schema(self) -> None:
@@ -56,7 +58,8 @@ class SimpleSessionDB:
     def append_message(self, session_id: str, role: str, content: str) -> None:
         with self._db_cursor() as cursor:
             cursor.execute(
-                "INSERT INTO messages (session_id, role, content, timestamp) VALUES (?, ?, ?, strftime('%s', 'now'))",
+                "INSERT INTO messages (session_id, role, content, timestamp) "
+                "VALUES (?, ?, ?, strftime('%s', 'now'))",
                 (session_id, role, content),
             )
 
@@ -95,7 +98,8 @@ class SimpleSessionDB:
     def list_sessions(self, limit: int = 10) -> list[dict]:
         with self._db_cursor() as cursor:
             rows = cursor.execute(
-                "SELECT id, title, created_at, ended_at FROM sessions WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, title, created_at, ended_at FROM sessions "
+                "WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT ?",
                 (limit,),
             ).fetchall()
             sessions = []

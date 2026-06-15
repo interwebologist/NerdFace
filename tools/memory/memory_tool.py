@@ -1,9 +1,8 @@
 """Holographic Memory Tool - fact_store and fact_feedback for nerdface-agent."""
 
-import json
 from dataclasses import dataclass
 from typing import Optional
-from tools.registry import registry
+from tools.registry import registry, tool_result, tool_error
 from .store import MemoryStore
 from .retrieval import FactRetriever
 
@@ -44,7 +43,7 @@ def fact_store(args: dict) -> str:
                 category=args.get("category", "general"),
                 tags=args.get("tags", ""),
             )
-            return json.dumps({"fact_id": fact_id, "status": "added"})
+            return tool_result(fact_id=fact_id, status="added")
 
         elif action == "search":
             results = _get_retriever().search(
@@ -53,7 +52,7 @@ def fact_store(args: dict) -> str:
                 min_trust=float(args.get("min_trust", 0.3)),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"results": results, "count": len(results)})
+            return tool_result(results=results, count=len(results))
 
         elif action == "probe":
             results = _get_retriever().probe(
@@ -61,7 +60,7 @@ def fact_store(args: dict) -> str:
                 category=args.get("category"),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"results": results, "count": len(results)})
+            return tool_result(results=results, count=len(results))
 
         elif action == "related":
             results = _get_retriever().related(
@@ -69,41 +68,41 @@ def fact_store(args: dict) -> str:
                 category=args.get("category"),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"results": results, "count": len(results)})
+            return tool_result(results=results, count=len(results))
 
         elif action == "reason":
             entities = args.get("entities", [])
             if not entities:
-                return json.dumps({"error": "reason requires 'entities' list"})
+                return tool_error("reason requires 'entities' list")
             results = _get_retriever().reason(
                 entities,
                 category=args.get("category"),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"results": results, "count": len(results)})
+            return tool_result(results=results, count=len(results))
 
         elif action == "contradict":
             results = _get_retriever().contradict(
                 category=args.get("category"),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"results": results, "count": len(results)})
+            return tool_result(results=results, count=len(results))
 
         elif action == "update":
+            trust_val = args.get("trust_delta")
+            trust_delta = float(trust_val) if trust_val is not None else None
             updated = _get_store().update_fact(
                 int(args.get("fact_id", 0)),
                 content=args.get("content"),
-                trust_delta=float(args.get("trust_delta"))
-                if "trust_delta" in args
-                else None,
+                trust_delta=trust_delta,
                 tags=args.get("tags"),
                 category=args.get("category"),
             )
-            return json.dumps({"updated": updated})
+            return tool_result(updated=updated)
 
         elif action == "remove":
             removed = _get_store().remove_fact(int(args.get("fact_id", 0)))
-            return json.dumps({"removed": removed})
+            return tool_result(removed=removed)
 
         elif action == "list":
             facts = _get_store().list_facts(
@@ -111,15 +110,15 @@ def fact_store(args: dict) -> str:
                 min_trust=float(args.get("min_trust", 0.0)),
                 limit=int(args.get("limit", 10)),
             )
-            return json.dumps({"facts": facts, "count": len(facts)})
+            return tool_result(facts=facts, count=len(facts))
 
         else:
-            return json.dumps({"error": f"Unknown action: {action}"})
+            return tool_error(f"Unknown action: {action}")
 
     except KeyError as exc:
-        return json.dumps({"error": f"Missing required argument: {exc}"})
+        return tool_error(f"Missing required argument: {exc}")
     except Exception as exc:
-        return json.dumps({"error": str(exc)})
+        return tool_error(str(exc))
 
 
 def fact_feedback(args: dict) -> str:
@@ -128,9 +127,9 @@ def fact_feedback(args: dict) -> str:
         fact_id = int(args.get("fact_id", 0))
         helpful = args.get("action") == "helpful"
         result = _get_store().record_feedback(fact_id, helpful=helpful)
-        return json.dumps(result)
+        return tool_result(result)
     except Exception as exc:
-        return json.dumps({"error": str(exc)})
+        return tool_error(str(exc))
 
 
 # Tool schemas
@@ -138,16 +137,20 @@ FACT_STORE_SCHEMA = {
     "name": "fact_store",
     "description": (
         "Deep structured memory with algebraic reasoning. "
-        "Use to store facts the user would expect you to remember, or search/probe for past information.\n\n"
+        "Use to store facts the user would expect you to remember, "
+        "or search/probe for past information.\n\n"
         "ACTIONS:\n"
         "• add — Store a fact (requires 'content' parameter)\n"
         "• search — Keyword lookup (requires 'query' parameter)\n"
-        "• probe — Entity recall: ALL facts about a person/thing (requires 'entity' parameter)\n"
+        "• probe — Entity recall: ALL facts about a person/thing "
+        "(requires 'entity' parameter)\n"
         "• related — What connects to an entity? Structural adjacency\n"
-        "• reason — Compositional: facts connected to MULTIPLE entities simultaneously\n"
+        "• reason — Compositional: facts connected to MULTIPLE entities "
+        "simultaneously\n"
         "• contradict — Find facts making conflicting claims\n"
         "• update/remove/list — CRUD operations\n\n"
-        "IMPORTANT: Before answering questions about the user, ALWAYS probe or reason first."
+        "IMPORTANT: Before answering questions about the user, "
+        "ALWAYS probe or reason first."
     ),
     "parameters": {
         "type": "object",
@@ -209,7 +212,8 @@ FACT_STORE_SCHEMA = {
 FACT_FEEDBACK_SCHEMA = {
     "name": "fact_feedback",
     "description": (
-        "Rate a fact after using it. Mark 'helpful' if accurate, 'unhelpful' if outdated. "
+        "Rate a fact after using it. Mark 'helpful' if accurate, "
+        "'unhelpful' if outdated. "
         "This trains the memory — good facts rise, bad facts sink."
     ),
     "parameters": {

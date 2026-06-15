@@ -1,20 +1,14 @@
 """Auxiliary LLM client for compression tasks."""
 
 import logging
-import os
-
-from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
+from llm_client import client, DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 
-client = OpenAI(
-    base_url=os.getenv("OPENAI_API_BASE", "http://192.168.1.33:8080/v1"),
-    api_key=os.getenv("OPENAI_API_KEY", "not-needed"),
-)
-
 
 def call_llm(
-    messages: list[dict[str, object]],
+    messages: list[ChatCompletionMessageParam],
     model: str | None = None,
     max_tokens: int | None = None,
 ) -> str:
@@ -28,7 +22,7 @@ def call_llm(
     Returns:
         LLM response content
     """
-    model_name = model or os.getenv("MODEL_NAME", "default-model")
+    model_name = model or DEFAULT_MODEL
 
     try:
         response = client.chat.completions.create(

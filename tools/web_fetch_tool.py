@@ -1,15 +1,16 @@
 """Web Fetch Tool - Fetch URLs and return Markdown content."""
 
-import json
 import re
 import requests
 from bs4 import BeautifulSoup
 from markdownify import markdownify as md
-from tools.registry import registry
+from tools.registry import registry, tool_result, tool_error
 
 
 def web_fetch(url: str) -> str:
-    """Fetches a URL, converts GitHub links to raw, cleans HTML, and returns Markdown."""
+    """Fetches a URL, converts GitHub links to raw, cleans HTML,
+    and returns Markdown.
+    """
     github_pattern = r"https?://(?:www\.)?github\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.*)"
 
     if "github.com" in url and "/blob/" in url:
@@ -25,12 +26,10 @@ def web_fetch(url: str) -> str:
                 )
                 if response.status_code == 200:
                     ext = filepath.split(".")[-1] if "." in filepath else ""
-                    return json.dumps(
-                        {
-                            "url": url,
-                            "raw_url": raw_url,
-                            "content": f"```{ext}\n{response.text}\n```",
-                        }
+                    return tool_result(
+                        url=url,
+                        raw_url=raw_url,
+                        content=f"```{ext}\n{response.text}\n```",
                     )
             except Exception:
                 pass
@@ -40,12 +39,14 @@ def web_fetch(url: str) -> str:
             url,
             headers={
                 "User-Agent": "Claude-User",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept": (
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                ),
             },
             timeout=10,
         )
         if response.status_code != 200:
-            return json.dumps({"error": f"Error: {response.status_code}"})
+            return tool_error(f"Error: {response.status_code}")
 
         soup = BeautifulSoup(response.text, "html.parser")
         for el in soup(
@@ -54,14 +55,17 @@ def web_fetch(url: str) -> str:
             el.decompose()
 
         markdown = md(str(soup), strip=["img", "button"], heading_style="atx").strip()
-        return json.dumps({"url": url, "content": markdown})
+        return tool_result(url=url, content=markdown)
     except Exception as e:
-        return json.dumps({"error": f"Error: {str(e)}"})
+        return tool_error(f"Error: {str(e)}")
 
 
 WEB_FETCH_SCHEMA = {
     "name": "web_fetch",
-    "description": "Fetch a URL and return clean Markdown content. Detects GitHub links and gets raw code.",
+    "description": (
+        "Fetch a URL and return clean Markdown content. "
+        "Detects GitHub links and gets raw code."
+    ),
     "parameters": {
         "type": "object",
         "properties": {"url": {"type": "string", "description": "The URL to fetch"}},
