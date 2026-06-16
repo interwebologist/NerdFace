@@ -177,12 +177,13 @@ def process_chat_message(
     logger.debug("Assistant response stored")
 
     print(f"\n{response}\n")
-
+    if os.getenv("COMRESSION_SIZE"):
+        compression_size = os.getenv("COMPRESSION_SIZE")
     if os.getenv("ENABLE_COMPRESSION") == "true":
         from compression.model_metadata import estimate_messages_tokens_rough
 
         estimate = estimate_messages_tokens_rough(agent_history)
-        if estimate > 100000:
+        if estimate > compression_size:
             print(f"Warning: Context size ({estimate} tokens) is getting large")
             compressor = ContextCompressor()
             compressor.compress(agent_history)
