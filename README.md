@@ -2,6 +2,43 @@
   <img src="images/nerdface.png" alt="Nerdface Logo" width="600"/>
 </p>
 
+# ☝️🤓 Nerdface
+
+Hardened local agent. Hackable. Production-ready.
+
+## Features
+- **Security**: Local `llm-guard` scanning. Blocks prompt injection & sandbox escapes.
+- **Sandbox**: Strong isolation via Shuru MicroVM.
+- **Memory**: Local Holographic HRR + FTS5. O(log N) scaling.
+- **Browser**: Camofox. Self-hosted, anti-bot.
+- **Search**: 
+  - **DuckDuckGo**: Built-in anonymous web search.
+  - **SerpBase**: Deep search engine dorking with persistent credits.
+- **State**: SQLite persistence at `~/.nerdface/state.db`.
+
+## Setup
+```bash
+uv sync
+```
+
+## Execution
+### CLI
+```bash
+uv run cli.py
+```
+
+### API
+```bash
+uv run run.py
+```
+
+---
+
+## Legacy Documentation (Archive)
+
+<details>
+<summary>View original README content</summary>
+
 # ☝️🤓 NERD FACE 
 
 A hackable, lightweight local agent hardened for production
@@ -74,3 +111,5 @@ curl -X POST http://localhost:8000/apply \
 ```
 
 *Note: The Dockerfile includes git, vim, tmux installation and automatic GitHub token configuration for HTTP endpoints. The agent will automatically use the GITHUB_TOKEN environment variable for git operations requiring authentication.*
+
+</details>
