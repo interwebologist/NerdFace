@@ -32,16 +32,17 @@ MAX_ITERATIONS = 300
 
 def load_system_prompt() -> str:
     """Load system prompt from environment variable or file."""
-    env_prompt = os.getenv("SYSTEM_PROMPT")
-    if env_prompt:
-        return env_prompt.strip()
+    #env_prompt = os.getenv("SYSTEM_PROMPT")
+    #if env_prompt:
+    #    return env_prompt.strip()
 
     path = Path("prompts/system_prompt.md")
     if path.exists():
+        logging.debug("System Prompt Exists At %s", path)
         with path.open("r") as f:
             return f.read().strip()
     else:
-        logging.debug("No System Prompt Loading from %s", path)
+        logging.debug("No system prompt loading from %s", path)
         return ""
 
 
@@ -57,15 +58,17 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
         guardrails.trigger_kill_switch()
         return f"ERROR: Input blocked [{block_type}]: {block_msg}"
 
-    if not CHAT_HISTORY:
-        logger.debug("no chat history")
+    if CHAT_HISTORY:
+        logger.debug("chat history detected")
         sys_p = load_system_prompt()
         if sys_p:
             msg = {"role": "system", "content": sys_p}
             logger.debug("chat history was cleared. Added to CHAT_HISTORY new system prompt: %s", msg)
             CHAT_HISTORY.append(msg)
+        elif sys_p == None:
+                    logging.debug("No System Prompt Loaded")
     else:
-        logger.debug("chat history exists not appending system prompt")
+        logger.debug("No Chat History")
 
     msg = {"role": "user", "content": prompt}
     CHAT_HISTORY.append(msg)
@@ -85,9 +88,10 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                 model=model, messages=CHAT_HISTORY, tools=tools, timeout=360
             )
         except APIConnectionError as e:
-            logger.error("OpenAI API Connection error. Is LLM server up? : %s", str(e))
+            logger.error("OpenAI API Connection error. Is LLM server up? : %s", str(e), exc_info=True)
         except Exception as e:
-            logger.error("OpenAI API error: %s", str(e), exc_info=True)
+            logger.error("OpenAI API client error: %s", str(e), exc_info=True)
+
             if "Failed to parse tool call arguments as JSON" in str(e):
                 error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments. Please reformat your request."
                 msg = {
