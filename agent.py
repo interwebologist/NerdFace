@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 from dotenv import load_dotenv
-from openai import OpenAI, InternalServerError
+from openai import OpenAI, InternalServerError, APIConnectionError
 from tools.registry import registry, discover_builtin_tools
 
 from guardrails import create_guardrails, Guardrails
@@ -17,6 +17,7 @@ discover_builtin_tools()
 load_dotenv(".nerdface/.env")
 
 guardrails: Guardrails = create_guardrails()
+
 
 client = OpenAI(
     base_url=os.getenv("OPENAI_API_BASE", "http://192.168.1.33:8080/v1"),
@@ -31,15 +32,18 @@ MAX_ITERATIONS = 300
 
 def load_system_prompt() -> str:
     """Load system prompt from environment variable or file."""
-    env_prompt = os.getenv("SYSTEM_PROMPT")
-    if env_prompt:
-        return env_prompt.strip()
+    #env_prompt = os.getenv("SYSTEM_PROMPT")
+    #if env_prompt:
+    #    return env_prompt.strip()
 
     path = Path("prompts/system_prompt.md")
     if path.exists():
+        logging.debug("System Prompt Exists At %s", path)
         with path.open("r") as f:
             return f.read().strip()
-    return ""
+    else:
+        logging.debug("No system prompt loading from %s", path)
+        return ""
 
 
 def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
@@ -54,16 +58,23 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
         guardrails.trigger_kill_switch()
         return f"ERROR: Input blocked [{block_type}]: {block_msg}"
 
-    if not CHAT_HISTORY:
+    if CHAT_HISTORY:
+        logger.debug("chat history detected")
         sys_p = load_system_prompt()
         if sys_p:
             msg = {"role": "system", "content": sys_p}
-            CHAT_HISTORY.append(msg)
-            logger.debug("Added to CHAT_HISTORY: %s", msg)
+            if CHAT_HISTORY and CHAT_HISTORY[0].get("role") == "system":
+                CHAT_HISTORY.pop(0)
+            CHAT_HISTORY.insert(0, msg)
+            logger.debug("chat history was cleared. Added to CHAT_HISTORY new system prompt: %s", json.dumps(msg, indent=2))
+        elif sys_p == None:
+                    logging.debug("No System Prompt Loaded")
+    else:
+        logger.debug("No Chat History")
 
     msg = {"role": "user", "content": prompt}
     CHAT_HISTORY.append(msg)
-    logger.debug("Added to CHAT_HISTORY: %s", msg)
+    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
 
     iterations = 0
     while iterations < max_iterations:
@@ -78,8 +89,12 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
             res = client.chat.completions.create(
                 model=model, messages=CHAT_HISTORY, tools=tools, timeout=360
             )
-        except InternalServerError as e:
-            logger.error("OpenAI API error: %s", str(e), exc_info=True)
+        except APIConnectionError as e:
+            logger.error("OpenAI API Connection error. Is LLM server up? : %s", str(e), exc_info=True)
+            raise
+        except Exception as e:
+            logger.error("OpenAI API client error: %s", str(e), exc_info=True)
+
             if "Failed to parse tool call arguments as JSON" in str(e):
                 error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments. Please reformat your request."
                 msg = {
@@ -97,14 +112,14 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                     ],
                 }
                 CHAT_HISTORY.append(msg)
-                logger.debug("Added to CHAT_HISTORY: %s", msg)
+                logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 msg = {
                     "role": "tool",
                     "tool_call_id": "error_tool_call",
                     "content": json.dumps({"error": error_msg}),
                 }
                 CHAT_HISTORY.append(msg)
-                logger.debug("Added to CHAT_HISTORY: %s", msg)
+                logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 return error_msg
             raise
         msg = res.choices[0].message
@@ -112,7 +127,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
 
         msg_dict = msg.model_dump(exclude_none=True)
         CHAT_HISTORY.append(msg_dict)
-        logger.debug("Added to CHAT_HISTORY: %s", msg_dict)
+        logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg_dict, indent=2))
 
         if not msg.tool_calls:
             return str(msg.content)
@@ -129,7 +144,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                         "content": out,
                     }
                     CHAT_HISTORY.append(msg)
-                    logger.debug("Added to CHAT_HISTORY: %s", msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 except Exception as e:
                     logger.error(
                         "Tool execution error for %s: %s",
@@ -143,7 +158,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                         "content": f"Error: {str(e)}",
                     }
                     CHAT_HISTORY.append(msg)
-                    logger.debug("Added to CHAT_HISTORY: %s", msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
 
     return "Error: Maximum iterations reached without final response."
 
@@ -161,6 +176,6 @@ def on_session_end() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    #logging.basicConfig(level=logging.INFO)
     result = run("Run a bash command that fails and outputs a lot of text.")
     logger.info("Agent result: %s", result)
