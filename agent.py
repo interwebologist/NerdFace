@@ -63,8 +63,10 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
         sys_p = load_system_prompt()
         if sys_p:
             msg = {"role": "system", "content": sys_p}
-            logger.debug("chat history was cleared. Added to CHAT_HISTORY new system prompt: %s", msg)
-            CHAT_HISTORY.append(msg)
+            if CHAT_HISTORY and CHAT_HISTORY[0].get("role") == "system":
+                CHAT_HISTORY.pop(0)
+            CHAT_HISTORY.insert(0, msg)
+            logger.debug("chat history was cleared. Added to CHAT_HISTORY new system prompt: %s", json.dumps(msg, indent=2))
         elif sys_p == None:
                     logging.debug("No System Prompt Loaded")
     else:
@@ -72,7 +74,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
 
     msg = {"role": "user", "content": prompt}
     CHAT_HISTORY.append(msg)
-    logger.debug("Added to CHAT_HISTORY: %s", msg)
+    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
 
     iterations = 0
     while iterations < max_iterations:
@@ -89,6 +91,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
             )
         except APIConnectionError as e:
             logger.error("OpenAI API Connection error. Is LLM server up? : %s", str(e), exc_info=True)
+            raise
         except Exception as e:
             logger.error("OpenAI API client error: %s", str(e), exc_info=True)
 
@@ -109,14 +112,14 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                     ],
                 }
                 CHAT_HISTORY.append(msg)
-                logger.debug("Added to CHAT_HISTORY: %s", msg)
+                logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 msg = {
                     "role": "tool",
                     "tool_call_id": "error_tool_call",
                     "content": json.dumps({"error": error_msg}),
                 }
                 CHAT_HISTORY.append(msg)
-                logger.debug("Added to CHAT_HISTORY: %s", msg)
+                logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 return error_msg
             raise
         msg = res.choices[0].message
@@ -124,7 +127,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
 
         msg_dict = msg.model_dump(exclude_none=True)
         CHAT_HISTORY.append(msg_dict)
-        logger.debug("Added to CHAT_HISTORY: %s", msg_dict)
+        logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg_dict, indent=2))
 
         if not msg.tool_calls:
             return str(msg.content)
@@ -141,7 +144,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                         "content": out,
                     }
                     CHAT_HISTORY.append(msg)
-                    logger.debug("Added to CHAT_HISTORY: %s", msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
                 except Exception as e:
                     logger.error(
                         "Tool execution error for %s: %s",
@@ -155,7 +158,7 @@ def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
                         "content": f"Error: {str(e)}",
                     }
                     CHAT_HISTORY.append(msg)
-                    logger.debug("Added to CHAT_HISTORY: %s", msg)
+                    logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
 
     return "Error: Maximum iterations reached without final response."
 
