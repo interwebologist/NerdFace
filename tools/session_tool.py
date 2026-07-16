@@ -1,12 +1,13 @@
 """Session Tool - Clear conversation history."""
 
 import json
+from agent import Agent
 from tools.registry import registry
 
+agent = Agent()
 
 def clear_topic(new_topic: str = "") -> str:
     """Clears the conversation history (except system prompt) and starts a new topic if provided."""
-    import agent
 
     sys_prompt = None
     if agent.CHAT_HISTORY and agent.CHAT_HISTORY[0].get("role") == "system":
