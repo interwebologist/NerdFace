@@ -58,7 +58,7 @@ def load_system_prompt() -> str:
         logging.debug("No system prompt loading from %s", path)
         return ""
 
-
+@tracer.agent
 def run(prompt: str, max_iterations: int = MAX_ITERATIONS) -> str:
     global CHAT_HISTORY
 
