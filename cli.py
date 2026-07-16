@@ -9,7 +9,7 @@ import logging
 import os
 
 from state import SimpleSessionDB
-from agent import run as agent_run
+from agent import Agent
 from compression.context_compressor import ContextCompressor
 
 logging.basicConfig(
@@ -165,11 +165,10 @@ def process_chat_message(
     session_db.append_message(current_session_id, "user", message)
     logger.debug(f"User message stored: {message[:100]}...")
 
-    from agent import CHAT_HISTORY
-
-    CHAT_HISTORY[:] = agent_history
-    logger.debug("Calling agent_run...")
-    response = agent_run(message)
+    agent = Agent()
+    agent.CHAT_HISTORY = agent_history
+    logger.debug("Calling agent.run...")
+    response = agent.run(message)
     logger.debug(f"Agent response received: {response[:100]}...")
 
     agent_history.append({"role": "assistant", "content": response})
