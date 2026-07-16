@@ -19,6 +19,8 @@ dependencies = [
     "markdownify>=1.2.2",
     "llm-guard>=0.3.0,<0.4.0",
     "hexdump>=3.3",
+    "arize-phoenix>=14.6.0",
+    "openinference-instrumentation-openai>=0.1.52",
 ]
 
 [project.optional-dependencies]

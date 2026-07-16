@@ -4,7 +4,7 @@ import json
 from tools.registry import registry
 
 
-def web_search(query: str, max_results: int = 3) -> str:
+def web_search(query: str, max_results: int = 5) -> str:
     """Searches the web using DuckDuckGo and returns the top results."""
     try:
         from ddgs import DDGS
@@ -45,7 +45,7 @@ def check_web_search_requirements() -> bool:
 
 WEB_SEARCH_SCHEMA = {
     "name": "web_search",
-    "description": "Search the web using DuckDuckGo. Returns search results with title, snippet, and URL.",
+    "description": "Search the web with DuckDuckGo. Output: results with title, snippet, and URL.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -53,7 +53,7 @@ WEB_SEARCH_SCHEMA = {
             "max_results": {
                 "type": "integer",
                 "description": "Number of results to return",
-                "default": 3,
+                "default": 5,
             },
         },
         "required": ["query"],
