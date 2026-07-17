@@ -2,24 +2,30 @@ import json
 import logging
 import os
 from pathlib import Path
-import phoenix as px
 from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI, InternalServerError, APIConnectionError
 from openinference.instrumentation.openai import OpenAIInstrumentor
+from phoenix.otel import register
 from tools.registry import registry, discover_builtin_tools
 from guardrails import create_guardrails, Guardrails
 from tools.memory.store import MemoryStore
 
-
-# 1. Start the local Phoenix tracer session
-session = px.launch_app()
-#logger.debug("chat history detected")
-
-# 2. Automatically capture all OpenAI inputs, outputs, and internal steps
-OpenAIInstrumentor().instrument()
-
 logger = logging.getLogger(__name__)
+
+# Configure Phoenix tracer to send traces to local instance
+PHOENIX_ENDPOINT = "http://127.0.0.1:6006/v1/traces"
+
+tracer_provider = register(
+    endpoint=PHOENIX_ENDPOINT,
+    project_name="nerdface",
+    set_global_tracer_provider=False,
+)
+
+tracer = tracer_provider.get_tracer(__name__)
+
+# Instrument OpenAI with our tracer provider
+OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 discover_builtin_tools()
 load_dotenv(".nerdface/.env")
@@ -56,7 +62,8 @@ class Agent():
             return ""
 
 
-    def run(self, prompt: str ) -> str:
+    @tracer.agent
+    def run(self, prompt: str) -> str:
         max_iterations = self.MAX_ITERATIONS
 
         if guardrails.is_kill_switch_triggered():
@@ -147,7 +154,13 @@ class Agent():
                     func_name = call.function.name
                     try:
                         args = json.loads(call.function.arguments)
-                        out = registry.dispatch(func_name, args)
+                        with tracer.start_as_current_span(
+                            f"tool.{func_name}",
+                            openinference_span_kind="tool",
+                        ) as span:
+                            span.set_input(args)
+                            out = registry.dispatch(func_name, args)
+                            span.set_output(out)
                         msg = {
                             "role": "tool",
                             "tool_call_id": call.id,
