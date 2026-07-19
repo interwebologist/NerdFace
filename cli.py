@@ -161,17 +161,15 @@ def process_chat_message(
         print("No active session. Use /new to start one.")
         return current_session_id, agent_history
 
-    agent_history.append({"role": "user", "content": message})
     session_db.append_message(current_session_id, "user", message)
     logger.debug(f"User message stored: {message[:100]}...")
 
     agent = Agent()
-    agent.CHAT_HISTORY = agent_history
     logger.debug("Calling agent.run...")
     response = agent.run(message)
     logger.debug(f"Agent response received: {response[:100]}...")
 
-    agent_history.append({"role": "assistant", "content": response})
+    agent_history = agent.CHAT_HISTORY
     session_db.append_message(current_session_id, "assistant", response)
     logger.debug("Assistant response stored")
 
