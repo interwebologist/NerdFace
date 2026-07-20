@@ -6,6 +6,7 @@ from tools.registry import registry
 
 agent = Agent()
 
+
 def clear_topic(new_topic: str = "") -> str:
     """Clears the conversation history (except system prompt) and starts a new topic if provided."""
 
