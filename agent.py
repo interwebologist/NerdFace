@@ -14,7 +14,6 @@ from tools.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
 
-# Configure Phoenix tracer to send traces to local instance
 PHOENIX_ENDPOINT = "http://127.0.0.1:6006/v1/traces"
 
 tracer_provider = register(
@@ -26,13 +25,11 @@ tracer_provider = register(
 
 tracer = tracer_provider.get_tracer(__name__)
 
-# Instrument OpenAI with our tracer provider. This catches llm reqs with
 OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 discover_builtin_tools()
 
 load_dotenv(".nerdface/.env")
-
 
 client = OpenAI(
     base_url=os.getenv("OPENAI_API_BASE", "http://192.168.1.33:8080/v1"),
@@ -71,141 +68,138 @@ class Agent:
 
         return (False, "Guardrail Checks Passed")
 
+    def _add_message(self, msg: dict) -> None:
+        """Add message to chat history with logging."""
+        self.CHAT_HISTORY.append(msg)
+        logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
+
+    def _add_error_tool_call(self, error_msg: str) -> None:
+        """Add error tool call to history for JSON parse failures."""
+        msg = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "error_tool_call",
+                    "type": "function",
+                    "function": {"name": "error_handler", "arguments": "{}"},
+                }
+            ],
+        }
+        self._add_message(msg)
+
+        msg = {
+            "role": "tool",
+            "tool_call_id": "error_tool_call",
+            "content": json.dumps({"error": error_msg}),
+        }
+        self._add_message(msg)
+
+    def _handle_llm_error(self, error: Exception) -> None:
+        """Handle LLM API errors and update chat history."""
+        if "Failed to parse tool call arguments as JSON" in str(error):
+            error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments."
+            self._add_error_tool_call(error_msg)
+        else:
+            logger.error("OpenAI API client error: %s", error, exc_info=True)
+
+    def _handle_tool_error(self, call, error: Exception) -> dict:
+        """Create error message for failed tool execution."""
+        logger.error("Tool execution error for %s: %s", call.id, error, exc_info=True)
+        return {
+            "role": "tool",
+            "tool_call_id": call.id,
+            "content": f"Error: {str(error)}",
+        }
+
+    def _call_llm(self, tools: list[dict]) -> dict:
+        """Make LLM call and return response message."""
+        try:
+            res = client.chat.completions.create(
+                model=model,
+                messages=self.CHAT_HISTORY,
+                tools=tools,
+                timeout=360,
+            )
+            return res.choices[0].message
+        except APIConnectionError:
+            logger.error("OpenAI API Connection error. Is LLM server up?")
+            raise
+        except Exception as e:
+            self._handle_llm_error(e)
+            raise
+
+    def _execute_tool(self, call) -> str:
+        """Execute a single tool call and return the output."""
+        func_name = call.function.name
+        args = json.loads(call.function.arguments)
+
+        with tracer.start_as_current_span(
+            f"tool.{func_name}",
+            openinference_span_kind="tool",
+        ) as span:
+            span.set_input(args)
+            output = registry.dispatch(func_name, args)
+            span.set_output(output)
+
+        return output
+
+    def _handle_kill_switch(self) -> str:
+        """Handle kill switch activation and return error message."""
+        kill_result = self.guardrails.trigger_kill_switch()
+        return f"ERROR: Kill switch activated during execution. {kill_result}"
+
+    def _log_llm_request(self, tools: list[dict]) -> None:
+        """Log LLM request details."""
+        logger.debug(
+            "LLM REQUEST: %s",
+            json.dumps(
+                {"messages": self.CHAT_HISTORY, "tools": tools},
+                indent=2,
+            ),
+        )
+
     @tracer.agent
     def run(self, prompt: str) -> str:
-        max_iterations = self.MAX_ITERATIONS
         with using_session(self.session_id):
-            msg = {"role": "user", "content": prompt}
-            self.CHAT_HISTORY.append(msg)
-            logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
+            self._add_message({"role": "user", "content": prompt})
 
-            iterations = 0
-            while iterations < max_iterations:
+            for _ in range(self.MAX_ITERATIONS):
                 if self.guardrails.is_kill_switch_triggered():
-                    kill_result = self.guardrails.trigger_kill_switch()
-                    return (
-                        f"ERROR: Kill switch activated during execution. {kill_result}"
-                    )
+                    return self._handle_kill_switch()
 
-                iterations += 1
                 tools = registry.get_definitions(
                     set(registry.get_all_tool_names()), quiet=True
                 )
-                logger.debug(
-                    "LLM REQUEST: %s",
-                    json.dumps(
-                        {"messages": self.CHAT_HISTORY, "tools": tools}, indent=2
-                    ),
-                )
-                try:
-                    res = client.chat.completions.create(
-                        model=model,
-                        messages=self.CHAT_HISTORY,
-                        tools=tools,
-                        timeout=360,
-                    )
-                except APIConnectionError as e:
-                    logger.error(
-                        "OpenAI API Connection error. Is LLM server up? : %s",
-                        str(e),
-                        exc_info=True,
-                    )
-                    raise
-                except Exception as e:
-                    logger.error("OpenAI API client error: %s", str(e), exc_info=True)
+                self._log_llm_request(tools)
 
-                    if "Failed to parse tool call arguments as JSON" in str(e):
-                        error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments. Please reformat your request."
-                        msg = {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "id": "error_tool_call",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "error_handler",
-                                        "arguments": "{}",
-                                    },
-                                }
-                            ],
-                        }
-                        self.CHAT_HISTORY.append(msg)
-                        logger.debug(
-                            "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                        )
-                        msg = {
-                            "role": "tool",
-                            "tool_call_id": "error_tool_call",
-                            "content": json.dumps({"error": error_msg}),
-                        }
-                        self.CHAT_HISTORY.append(msg)
-                        logger.debug(
-                            "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                        )
-                        return error_msg
-                    raise
-                msg = res.choices[0].message
-                logger.debug(
-                    "LLM RESPONSE: %s",
-                    json.dumps(msg.model_dump(exclude_none=True), indent=2),
-                )
-
-                msg_dict = msg.model_dump(exclude_none=True)
-                self.CHAT_HISTORY.append(msg_dict)
-                logger.debug(
-                    "Added to CHAT_HISTORY: %s", json.dumps(msg_dict, indent=2)
-                )
+                msg = self._call_llm(tools)
+                self._add_message(msg.model_dump(exclude_none=True))
 
                 if not msg.tool_calls:
                     return str(msg.content)
 
                 for call in msg.tool_calls:
                     if call.type == "function":
-                        func_name = call.function.name
                         try:
-                            args = json.loads(call.function.arguments)
-                            with tracer.start_as_current_span(
-                                f"tool.{func_name}",
-                                openinference_span_kind="tool",
-                            ) as span:
-                                span.set_input(args)
-                                out = registry.dispatch(func_name, args)
-                                span.set_output(out)
-                            msg = {
+                            output = self._execute_tool(call)
+                            tool_msg = {
                                 "role": "tool",
                                 "tool_call_id": call.id,
-                                "content": out,
+                                "content": output,
                             }
-                            self.CHAT_HISTORY.append(msg)
-                            logger.debug(
-                                "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                            )
+                            self._add_message(tool_msg)
                         except Exception as e:
-                            logger.error(
-                                "Tool execution error for %s: %s",
-                                call.id,
-                                str(e),
-                                exc_info=True,
-                            )
-                            msg = {
-                                "role": "tool",
-                                "tool_call_id": call.id,
-                                "content": f"Error: {str(e)}",
-                            }
-                            self.CHAT_HISTORY.append(msg)
-                            logger.debug(
-                                "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                            )
+                            tool_msg = self._handle_tool_error(call, e)
+                            self._add_message(tool_msg)
 
             return "Error: Maximum iterations reached without final response."
 
-    def on_session_end() -> None:
+    def on_session_end(self) -> None:
         """Auto-extract facts from conversation at session end."""
-        global CHAT_HISTORY
         try:
             store = MemoryStore(db_path="~/.skunk/state.db")
-            extracted = store.auto_extract_facts(CHAT_HISTORY)
+            extracted = store.auto_extract_facts(self.CHAT_HISTORY)
             if extracted > 0:
                 logger.info("Auto-extracted %d facts from session", extracted)
         except Exception as e:
@@ -213,7 +207,6 @@ class Agent:
 
 
 if __name__ == "__main__":
-    # logging.basicConfig(level=logging.INFO)
     agent = Agent()
     result = agent.run("Run a bash command that fails and outputs a lot of text.")
     logger.info("Agent result: %s", result)
