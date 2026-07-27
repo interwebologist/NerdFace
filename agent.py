@@ -9,8 +9,6 @@ from openai import OpenAI, APIConnectionError
 from openinference.instrumentation.openai import OpenAIInstrumentor
 from phoenix.otel import register, using_session
 from tools.registry import registry, discover_builtin_tools
-
-# from guardrails import create_guardrails, Guardrails
 from tools.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
@@ -48,7 +46,6 @@ class Agent:
         self.load_system_prompt()
         self.MAX_ITERATIONS = 30
         self.session_id = str(uuid.uuid4())[-6:]
-        # self.guardrails: Guardrails = create_guardrails()
 
     def load_system_prompt(self) -> None:
         """Load system prompt as first chat history message."""
@@ -58,18 +55,6 @@ class Agent:
                 0, {"role": "system", "content": path.read_text().strip()}
             )
 
-    #     is_blocked, block_msg, block_type = self.guardrails.validate_input(prompt)
-    #     attempts = 3
-    #     count=0
-    #     if is_blocked:
-    #         count = count+1
-    #         if count >= attempts:
-    #             self.guardrails.trigger_kill_switch()
-    #             block_msg = self.guardrails.trigger_kill_switch()
-    #             return(True, f"ERROR: Input blocked [{block_type}]: {block_msg}", {count - attempts})
-    #     return (False, f"Not blocked", {count - attempts})
-    #
-    def _handle_json_parse_error(self, e: Exception) -> str:
         """Handle a JSON parsing error from the LLM by injecting a synthetic
         error tool call into the chat history and returning the error message.
 
@@ -116,10 +101,6 @@ class Agent:
 
             iterations = 0
             while iterations < self.MAX_ITERATIONS:
-                # is_blocked, msg, attempts = self.guardrails_checks(prompt)
-                # if is_blocked:
-                #     return msg
-                #
                 iterations += 1
                 tools = registry.get_definitions(
                     set(registry.get_all_tool_names()), quiet=True
