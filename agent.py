@@ -9,7 +9,6 @@ from openai import OpenAI, APIConnectionError
 from openinference.instrumentation.openai import OpenAIInstrumentor
 from phoenix.otel import register, using_session
 from tools.registry import registry, discover_builtin_tools
-from guardrails import create_guardrails, Guardrails
 from tools.memory.store import MemoryStore
 
 logger = logging.getLogger(__name__)
@@ -47,7 +46,6 @@ class Agent:
         self.load_system_prompt()
         self.MAX_ITERATIONS = 30
         self.session_id = str(uuid.uuid4())[-6:]
-        self.guardrails: Guardrails = create_guardrails()
 
     def load_system_prompt(self) -> None:
         """Load system prompt as first chat history message."""
@@ -57,36 +55,52 @@ class Agent:
                 0, {"role": "system", "content": path.read_text().strip()}
             )
 
-    def guardrails_checks(self, prompt: str) -> tuple[bool, str]:
-        """Validate input against guardrails. Returns (is_blocked, message)."""
-        is_blocked, block_msg, block_type = self.guardrails.validate_input(prompt)
+        """Handle a JSON parsing error from the LLM by injecting a synthetic
+        error tool call into the chat history and returning the error message.
 
-        if self.guardrails.is_kill_switch_triggered():
-            kill_result = self.guardrails.trigger_kill_switch()
-            return (True, f"ERROR: Kill switch activated. {kill_result}")
+        Args:
+            e: The exception that triggered the JSON parse error.
 
-        if is_blocked:
-            self.guardrails.trigger_kill_switch()
-            return (True, f"ERROR: Input blocked [{block_type}]: {block_msg}")
-
-        return (False, "Guardrail Checks Passed")
+        Returns:
+            A human-readable error message describing the JSON parsing failure.
+        """
+        error_msg = (
+            "JSON parsing error: The model returned malformed JSON for tool "
+            "arguments. Please reformat your request."
+        )
+        assistant_msg = {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "error_tool_call",
+                    "type": "function",
+                    "function": {
+                        "name": "error_handler",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+        }
+        self.CHAT_HISTORY.append(assistant_msg)
+        tool_msg = {
+            "role": "tool",
+            "tool_call_id": "error_tool_call",
+            "content": json.dumps({"error": error_msg}),
+        }
+        self.CHAT_HISTORY.append(tool_msg)
+        return error_msg
 
     @tracer.agent
     def run(self, prompt: str) -> str:
-        max_iterations = self.MAX_ITERATIONS
+        self.MAX_ITERATIONS
+        msg = {"role": "user", "content": prompt}
         with using_session(self.session_id):
-            msg = {"role": "user", "content": prompt}
             self.CHAT_HISTORY.append(msg)
             logger.debug("Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2))
 
             iterations = 0
-            while iterations < max_iterations:
-                if self.guardrails.is_kill_switch_triggered():
-                    kill_result = self.guardrails.trigger_kill_switch()
-                    return (
-                        f"ERROR: Kill switch activated during execution. {kill_result}"
-                    )
-
+            while iterations < self.MAX_ITERATIONS:
                 iterations += 1
                 tools = registry.get_definitions(
                     set(registry.get_all_tool_names()), quiet=True
@@ -115,35 +129,7 @@ class Agent:
                     logger.error("OpenAI API client error: %s", str(e), exc_info=True)
 
                     if "Failed to parse tool call arguments as JSON" in str(e):
-                        error_msg = "JSON parsing error: The model returned malformed JSON for tool arguments. Please reformat your request."
-                        msg = {
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [
-                                {
-                                    "id": "error_tool_call",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "error_handler",
-                                        "arguments": "{}",
-                                    },
-                                }
-                            ],
-                        }
-                        self.CHAT_HISTORY.append(msg)
-                        logger.debug(
-                            "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                        )
-                        msg = {
-                            "role": "tool",
-                            "tool_call_id": "error_tool_call",
-                            "content": json.dumps({"error": error_msg}),
-                        }
-                        self.CHAT_HISTORY.append(msg)
-                        logger.debug(
-                            "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                        )
-                        return error_msg
+                        return self._handle_json_parse_error(e)
                     raise
                 msg = res.choices[0].message
                 logger.debug(
