@@ -98,14 +98,12 @@ class Agent:
             ],
         }
         self.CHAT_HISTORY.append(assistant_msg)
-        logger.debug("Added to CHAT_HISTORY: %s", json.dumps(assistant_msg, indent=2))
         tool_msg = {
             "role": "tool",
             "tool_call_id": "error_tool_call",
             "content": json.dumps({"error": error_msg}),
         }
         self.CHAT_HISTORY.append(tool_msg)
-        logger.debug("Added to CHAT_HISTORY: %s", json.dumps(tool_msg, indent=2))
         return error_msg
 
     @tracer.agent
