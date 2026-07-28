@@ -153,43 +153,47 @@ class Agent:
             tool_calls: List of tool call objects from the LLM response.
         """
         for call in tool_calls:
-            if call.type != "function":
-                continue
-            func_name = call.function.name
-            try:
-                args = json.loads(call.function.arguments)
-                with tracer.start_as_current_span(
-                    f"tool.{func_name}",
-                    openinference_span_kind="tool",
-                ) as span:
-                    span.set_input(args)
-                    out = registry.dispatch(func_name, args)
-                    span.set_output(out)
+            if call.type == "function":
+                func_name = call.function.name
+                content = self._dispatch_tool(func_name, call)
                 msg = {
                     "role": "tool",
                     "tool_call_id": call.id,
-                    "content": out,
+                    "content": content,
                 }
                 self.CHAT_HISTORY.append(msg)
                 logger.debug(
                     "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
                 )
-            except Exception as e:
-                logger.error(
-                    "Tool execution error for %s: %s",
-                    call.id,
-                    str(e),
-                    exc_info=True,
-                )
-                msg = {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": f"Error: {str(e)}",
-                }
-                self.CHAT_HISTORY.append(msg)
-                logger.debug(
-                    "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                )
+
+    def _dispatch_tool(self, func_name: str, call) -> str:
+        """Dispatch a single tool call and return its output content.
+
+        Args:
+            func_name: Name of the tool function to dispatch.
+            call: The tool call object containing arguments and ID.
+
+        Returns:
+            The tool output string, or an error message if dispatch fails.
+        """
+        try:
+            args = json.loads(call.function.arguments)
+            with tracer.start_as_current_span(
+                f"tool.{func_name}",
+                openinference_span_kind="tool",
+            ) as span:
+                span.set_input(args)
+                out = registry.dispatch(func_name, args)
+                span.set_output(out)
+            return out
+        except Exception as e:
+            logger.error(
+                "Tool execution error for %s: %s",
+                call.id,
+                str(e),
+                exc_info=True,
+            )
+            return f"Error: {str(e)}"
 
     def on_session_end() -> None:
         """Auto-extract facts from conversation at session end."""
