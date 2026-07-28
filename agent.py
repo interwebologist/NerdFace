@@ -44,7 +44,7 @@ class Agent:
     def __init__(self):
         self.CHAT_HISTORY: list[dict[str, Any]] = []
         self.load_system_prompt()
-        self.MAX_ITERATIONS = 30
+        self.MAX_ITERATIONS = 150
         self.session_id = str(uuid.uuid4())[-6:]
 
     def load_system_prompt(self) -> None:
@@ -62,7 +62,7 @@ class Agent:
             e: The exception that triggered the JSON parse error.
 
         Returns:
-            A human-readable error message describing the JSON parsing failure.
+            A agent-readable error message describing the JSON parsing failure.
         """
         error_msg = (
             "JSON parsing error: The model returned malformed JSON for tool "
@@ -132,10 +132,6 @@ class Agent:
                         return self._handle_json_parse_error(e)
                     raise
                 msg = res.choices[0].message
-                logger.debug(
-                    "LLM RESPONSE: %s",
-                    json.dumps(msg.model_dump(exclude_none=True), indent=2),
-                )
 
                 msg_dict = msg.model_dump(exclude_none=True)
                 self.CHAT_HISTORY.append(msg_dict)
@@ -146,45 +142,58 @@ class Agent:
                 if not msg.tool_calls:
                     return str(msg.content)
 
-                for call in msg.tool_calls:
-                    if call.type == "function":
-                        func_name = call.function.name
-                        try:
-                            args = json.loads(call.function.arguments)
-                            with tracer.start_as_current_span(
-                                f"tool.{func_name}",
-                                openinference_span_kind="tool",
-                            ) as span:
-                                span.set_input(args)
-                                out = registry.dispatch(func_name, args)
-                                span.set_output(out)
-                            msg = {
-                                "role": "tool",
-                                "tool_call_id": call.id,
-                                "content": out,
-                            }
-                            self.CHAT_HISTORY.append(msg)
-                            logger.debug(
-                                "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                            )
-                        except Exception as e:
-                            logger.error(
-                                "Tool execution error for %s: %s",
-                                call.id,
-                                str(e),
-                                exc_info=True,
-                            )
-                            msg = {
-                                "role": "tool",
-                                "tool_call_id": call.id,
-                                "content": f"Error: {str(e)}",
-                            }
-                            self.CHAT_HISTORY.append(msg)
-                            logger.debug(
-                                "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
-                            )
+                self._execute_tool_calls(msg.tool_calls)
 
             return "Error: Maximum iterations reached without final response."
+
+    def _execute_tool_calls(self, tool_calls: list) -> None:
+        """Execute each tool call, append results to CHAT_HISTORY, and log.
+
+        Args:
+            tool_calls: List of tool call objects from the LLM response.
+        """
+        for call in tool_calls:
+            if call.type == "function":
+                func_name = call.function.name
+                content = self._dispatch_tool(func_name, call)
+                msg = {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "content": content,
+                }
+                self.CHAT_HISTORY.append(msg)
+                logger.debug(
+                    "Added to CHAT_HISTORY: %s", json.dumps(msg, indent=2)
+                )
+
+    def _dispatch_tool(self, func_name: str, call) -> str:
+        """Dispatch a single tool call and return its output content.
+
+        Args:
+            func_name: Name of the tool function to dispatch.
+            call: The tool call object containing arguments and ID.
+
+        Returns:
+            The tool output string, or an error message if dispatch fails.
+        """
+        try:
+            args = json.loads(call.function.arguments)
+            with tracer.start_as_current_span(
+                f"tool.{func_name}",
+                openinference_span_kind="tool",
+            ) as span:
+                span.set_input(args)
+                out = registry.dispatch(func_name, args)
+                span.set_output(out)
+            return out
+        except Exception as e:
+            logger.error(
+                "Tool execution error for %s: %s",
+                call.id,
+                str(e),
+                exc_info=True,
+            )
+            return f"Error: {str(e)}"
 
     def on_session_end() -> None:
         """Auto-extract facts from conversation at session end."""
