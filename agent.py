@@ -44,7 +44,7 @@ class Agent:
     def __init__(self):
         self.CHAT_HISTORY: list[dict[str, Any]] = []
         self.load_system_prompt()
-        self.MAX_ITERATIONS = 30
+        self.MAX_ITERATIONS = 150
         self.session_id = str(uuid.uuid4())[-6:]
 
     def load_system_prompt(self) -> None:
