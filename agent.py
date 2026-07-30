@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 from dotenv import load_dotenv
 from openai import OpenAI, APIConnectionError
-from openinference.instrumentation.openai import OpenAIInstrumentor
 from phoenix.otel import register, using_session
 from tools.registry import registry, discover_builtin_tools
 from tools.memory.store import MemoryStore
@@ -19,14 +18,11 @@ PHOENIX_ENDPOINT = "http://127.0.0.1:6006/v1/traces"
 tracer_provider = register(
     endpoint=PHOENIX_ENDPOINT,
     project_name="nerdface",
-    set_global_tracer_provider=False,
+    set_global_tracer_provider=True,
     auto_instrument=True,
 )
 
 tracer = tracer_provider.get_tracer(__name__)
-
-# Instrument OpenAI with our tracer provider. This catches llm reqs with
-OpenAIInstrumentor().instrument(tracer_provider=tracer_provider)
 
 discover_builtin_tools()
 
