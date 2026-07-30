@@ -10,7 +10,6 @@ import os
 
 from state import SimpleSessionDB
 from agent import Agent
-from compression.context_compressor import ContextCompressor
 
 logging.basicConfig(
     level=logging.DEBUG
@@ -174,16 +173,6 @@ def process_chat_message(
     logger.debug("Assistant response stored")
 
     print(f"\n{response}\n")
-    if os.getenv("COMRESSION_SIZE"):
-        compression_size = os.getenv("COMPRESSION_SIZE")
-    if os.getenv("ENABLE_COMPRESSION") == "true":
-        from compression.model_metadata import estimate_messages_tokens_rough
-
-        estimate = estimate_messages_tokens_rough(agent_history)
-        if estimate > compression_size:
-            print(f"Warning: Context size ({estimate} tokens) is getting large")
-            compressor = ContextCompressor()
-            compressor.compress(agent_history)
 
     return current_session_id, agent_history
 
